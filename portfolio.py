@@ -15,7 +15,7 @@ def resumen_portafolio(df):
     }
 
 def top_ganadoras(df):
-    return df.sort_values("ganancia", ascending=False).head(5)
+    return df.sort_values("ganancia_live", ascending=False).head(5)
 
 def top_perdedoras(df):
-    return df.sort_values("ganancia").head(5)
+    return df.sort_values("ganancia_live").head(5)

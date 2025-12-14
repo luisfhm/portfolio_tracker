@@ -1,62 +1,56 @@
 import streamlit as st
 from data_loader import load_positions
 from price_fetcher import fetch_live_prices
-from portfolio import resumen_portafolio
+from portfolio import resumen_portafolio, top_ganadoras, top_perdedoras
 from opportunities import detectar_oportunidades
 
 st.set_page_config(page_title="Luis – Tracker en Vivo", layout="wide")
-
-st.title("📈 Tracker de Portafolio (Con precios en vivo)")
+st.title("📈 Tracker de Portafolio (Precios en Vivo)")
 
 df = load_positions()
+df["costo_total"] = df["costo_promedio"] * df["titulos"]  # Asegurar columna
 
-st.write("🔄 Actualizando precios en Yahoo Finance...")
+st.write("🔄 Actualizando precios desde Yahoo Finance...")
 df = fetch_live_prices(df)
+st.success("✅ Precios actualizados")
 
-st.success("Precios actualizados correctamente")
-
-# ---- Panel general ----
-resumen = {
-    "total_inversion": df["costo_total"].sum(),
-    "total_valor": df["valor_mercado"].sum(),
-    "ganancia_total": df["ganancia_live"].sum(),
-    "ganancia_pct": (df["ganancia_live"].sum() / df["costo_total"].sum()) * 100,
-}
+# Resumen general
+resumen = resumen_portafolio(df)
 
 col1, col2, col3, col4 = st.columns(4)
-
 col1.metric("Inversión total", f"${resumen['total_inversion']:,.2f}")
-col2.metric("Valor actual", f"${resumen['total_valor']:,.2f}")
-col3.metric("Ganancia (live)", f"${resumen['ganancia_total']:,.2f}")
-col4.metric("Variación % (live)", f"{resumen['ganancia_pct']:.2f}%")
+col2.metric("Valor actual", f"${resumen['total_valor']:,.2f}", 
+            delta=f"${resumen['ganancia_total']:,.2f}")
+col3.metric("Ganancia total", f"${resumen['ganancia_total']:,.2f}")
+col4.metric("Rendimiento %", f"{resumen['ganancia_pct']:.2f}%")
 
-# ---- Tabla actualizada ----
-st.header("Posiciones actualizadas")
-# ---- Formatear columnas numéricas para visualización ----
-df_display = df.copy()
+# Tabla de posiciones
+st.header("Posiciones detalladas")
+df_display = df[["ticker", "titulos", "costo_promedio", "precio_mercado", 
+                 "valor_mercado", "costo_total", "ganancia_live", "var_pct"]].copy()
 
-cols_money = [
-    "costo_promedio",
-    "precio_mercado",
-    "valor_mercado",
-    "costo_total",
-    "ganancia_live"
-]
+money_cols = ["costo_promedio", "precio_mercado", "valor_mercado", "costo_total", "ganancia_live"]
+for col in money_cols:
+    df_display[col] = df_display[col].map("${:,.2f}".format)
 
-for c in cols_money:
-    df_display[c] = df_display[c].apply(lambda x: f"${x:,.2f}")
+df_display["var_pct"] = df_display["var_pct"].map("{:.2f}%".format)
 
-# Porcentajes
-if "var_pct" in df_display.columns:
-    df_display["var_pct"] = df_display["var_pct"].apply(
-        lambda x: f"{x:.2f}%"
-    )
+st.dataframe(df_display, use_container_width=True)
 
-st.dataframe(df_display)
+# Top performers
+col_g, col_p = st.columns(2)
+with col_g:
+    st.subheader("🏆 Top 5 Ganadoras")
+    top_g = top_ganadoras(df).head(5)
+    st.dataframe(top_g[["ticker", "var_pct", "ganancia_live"]])
 
-# ---- Oportunidades ----
-st.header("🔍 Oportunidades detectadas con precio actual")
+with col_p:
+    st.subheader("📉 Top 5 Perdedoras")
+    top_p = top_perdedoras(df).head(5)
+    st.dataframe(top_p[["ticker", "var_pct", "ganancia_live"]])
+
+# Oportunidades
+st.header("🔍 Oportunidades detectadas")
 ops = detectar_oportunidades(df)
-
 for o in ops:
     st.write(o)
