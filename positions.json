@@ -1,7 +1,7 @@
 {
   "global": [
     {
-      "ticker": "1211",
+      "ticker": "1211.HK",
       "titulos": 11,
       "costo_promedio": 256.26,
       "precio_mercado": 228.73,
@@ -94,56 +94,56 @@
   ],
   "mexico": [
     {
-      "ticker": "AGUA",
+      "ticker": "AGUA.MX",
       "titulos": 130,
       "costo_promedio": 23.68,
       "precio_mercado": 12.53,
       "valor_mercado": 1628.90
     },
     {
-      "ticker": "ALSEA",
+      "ticker": "ALSEA.MX",
       "titulos": 120,
       "costo_promedio": 55.23,
       "precio_mercado": 50.89,
       "valor_mercado": 6106.80
     },
     {
-      "ticker": "CEMEX",
+      "ticker": "CEMEXCPO.MX",
       "titulos": 100,
       "costo_promedio": 13.23,
       "precio_mercado": 19.73,
       "valor_mercado": 1973.00
     },
     {
-      "ticker": "FMTY",
+      "ticker": "FMTY14.MX",
       "titulos": 550,
       "costo_promedio": 9.28,
       "precio_mercado": 15.28,
       "valor_mercado": 8404.00
     },
     {
-      "ticker": "FUNO",
+      "ticker": "FUNO11.MX",
       "titulos": 50,
       "costo_promedio": 28.10,
       "precio_mercado": 27.00,
       "valor_mercado": 1350.00
     },
     {
-      "ticker": "GMXT",
+      "ticker": "GMXT.MX",
       "titulos": 25,
       "costo_promedio": 40.62,
       "precio_mercado": 32.50,
       "valor_mercado": 812.50
     },
     {
-      "ticker": "KOF",
+      "ticker": "KOFUBL.MX",
       "titulos": 40,
       "costo_promedio": 145.28,
       "precio_mercado": 166.89,
       "valor_mercado": 6675.60
     },
     {
-      "ticker": "NAFTRAC",
+      "ticker": "NAFTRACISHRS.MX",
       "titulos": 90,
       "costo_promedio": 48.50,
       "precio_mercado": 63.69,
