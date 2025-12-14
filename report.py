@@ -3,6 +3,7 @@ from data_loader import load_positions
 from price_fetcher import fetch_live_prices
 from portfolio import resumen_portafolio, top_ganadoras, top_perdedoras
 from opportunities import detectar_oportunidades
+from news_fetcher import fetch_ticker_news, suggest_similar_opportunities
 import plotly.express as px
 
 st.set_page_config(page_title="Luis – Tracker Pro", layout="wide")
@@ -133,3 +134,38 @@ st.header("🔍 Oportunidades detectadas")
 ops = detectar_oportunidades(df_filtered)
 for o in ops:
     st.write(o)
+
+# --- Noticias y oportunidades similares ---
+st.header("📰 Noticias recientes y sugerencias")
+
+# Selector para ver noticias de un ticker específico (para no sobrecargar con todos)
+selected_ticker = st.selectbox("Seleccionar ticker para noticias y sugerencias", df_filtered["ticker"].unique())
+
+if selected_ticker:
+    row = df_filtered[df_filtered["ticker"] == selected_ticker].iloc[0]
+    with st.expander(f"Noticias y sugerencias para {selected_ticker} ({row['mercado']})", expanded=True):
+        col_n, col_s = st.columns([2, 1])
+        
+        with col_n:
+            st.subheader("📰 Noticias recientes")
+            news_list = fetch_ticker_news(selected_ticker)
+            if news_list and news_list[0]['title'] != 'Error cargando noticias':
+                for item in news_list:
+                    st.markdown(f"**{item['title']}**")
+                    st.caption(f"{item['publisher']} • [Ver artículo]({item['link']})")
+                    if item['snippet']:
+                        st.write(item['snippet'])
+                    st.divider()
+            else:
+                st.info("No hay noticias recientes disponibles para este ticker (común en fines de semana o tickers menores).")
+        
+        with col_s:
+            st.subheader("💡 Oportunidades similares")
+            similares = suggest_similar_opportunities(selected_ticker)
+            if similares:
+                st.write("Activos similares en sector/rendimiento:")
+                for sim in similares:
+                    st.write(f"- **{sim}**")
+                st.caption("Investiga estos para diversificar (no es consejo financiero).")
+            else:
+                st.info("No hay sugerencias predefinidas aún.")
