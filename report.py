@@ -28,6 +28,49 @@ if not warnings:
 else:
     st.success("✅ Precios actualizados (con algunos fallbacks)")
 
+# --- Cálculo de ganancias/pérdidas del día ---
+st.markdown("### 💰 Ganancias y pérdidas del día")
+
+# Ganancia del día = valor_mercado_actual * (var_pct / 100)
+df["ganancia_dia"] = df["valor_mercado"] * (df["var_pct"] / 100)
+
+# Resúmenes del día
+ganancia_dia_total = df["ganancia_dia"].sum()
+ganancia_dia_mex = df[df["mercado"] == "México"]["ganancia_dia"].sum()
+ganancia_dia_global = df[df["mercado"] == "Global"]["ganancia_dia"].sum()
+
+# Porcentaje del día sobre el valor total del portafolio
+pct_dia_total = (ganancia_dia_total / df["valor_mercado"].sum()) * 100 if df["valor_mercado"].sum() > 0 else 0
+
+# Métricas bonitas en columnas
+col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+
+col_d1.metric(
+    label="Ganancia del día (Total)",
+    value=f"${ganancia_dia_total:,.0f}",
+    delta=f"{pct_dia_total:+.2f}%"
+)
+
+col_d2.metric(
+    label="México (día)",
+    value=f"${ganancia_dia_mex:,.0f}",
+    delta=None
+)
+
+col_d3.metric(
+    label="Global (día)",
+    value=f"${ganancia_dia_global:,.0f}",
+    delta=None
+)
+
+# Variación promedio ponderada del portafolio hoy
+var_ponderada = pct_dia_total
+col_d4.metric(
+    label="Variación promedio del portafolio",
+    value=f"{var_ponderada:+.2f}%",
+    delta=None
+)
+
 # --- Clasificar por mercado ---
 df["mercado"] = df["ticker"].apply(
     lambda x: "México" if x.endswith(".MX") else "Global"
