@@ -4,10 +4,11 @@ import time
 
 def fetch_live_prices(df, fx_rates=None):
     """
-    Soporta MXN, HKD y USD. Puedes extenderlo fácilmente.
-    fx_rates: dict opcional, ej. {"HKD_MXN": 2.60, "USD_MXN": 20.50}
+    Actualiza precios en vivo, calcula:
+    - var_pct_dia: variación % del día (desde cierre anterior)
+    - ganancia_dia: ganancia/pérdida en MXN del día
+    - var_pct_total: rendimiento total desde compra (como antes)
     """
-    # --- 1. Obtener tipos de cambio si no se dan ---
     if fx_rates is None:
         fx_rates = {}
         try:
@@ -17,12 +18,11 @@ def fetch_live_prices(df, fx_rates=None):
         try:
             hkd_mxn = yf.Ticker("HKDMXN=X").history(period="1d")["Close"].iloc[-1]
         except:
-            # Alternativa: HKD/USD + USD/MXN
             try:
                 hkd_usd = yf.Ticker("HKDUSD=X").history(period="1d")["Close"].iloc[-1]
                 hkd_mxn = hkd_usd * usd_mxn
             except:
-                hkd_mxn = 2.60  # fallback razonable
+                hkd_mxn = 2.60
         fx_rates = {"USD_MXN": usd_mxn, "HKD_MXN": hkd_mxn}
         print(f"🔹 Tipos de cambio → USD/MXN: {usd_mxn:.4f}, HKD/MXN: {hkd_mxn:.4f}")
 
@@ -31,38 +31,69 @@ def fetch_live_prices(df, fx_rates=None):
     for idx, row in df.iterrows():
         ticker = str(row["ticker"])
         live_price = None
+        previous_close = None
+
         try:
             yf_ticker = yf.Ticker(ticker)
             info = yf_ticker.fast_info
-            live_price = info.get("lastPrice") if info else None
-            
-            if live_price is None or pd.isna(live_price):
+
+            # Precio actual
+            live_price = info.get("lastPrice") or info.get("currentPrice")
+            previous_close = info.get("previousClose")
+
+            # Fallback a history si fast_info falla
+            if live_price is None or previous_close is None:
                 history = yf_ticker.history(period="5d")
-                if not history.empty:
+                if len(history) >= 2:
                     live_price = history["Close"].iloc[-1]
-            
+                    previous_close = history["Close"].iloc[-2]
+                elif len(history) == 1:
+                    live_price = history["Close"].iloc[-1]
+                    previous_close = None  # No hay dato anterior
+
             if live_price is not None and pd.notna(live_price):
-                # --- 2. Detectar moneda por sufijo ---
+                # Convertir a MXN según moneda
                 if ticker.endswith(".MX"):
                     price_mxn = live_price
                 elif ticker.endswith(".HK"):
                     price_mxn = live_price * fx_rates["HKD_MXN"]
                 else:
-                    # Asumir USD para todo lo demás (AMZN, NIO, VWO, etc.)
                     price_mxn = live_price * fx_rates["USD_MXN"]
 
                 df.at[idx, "precio_mercado"] = round(price_mxn, 4)
                 df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
+
+                # === Cálculo variación del día ===
+                if previous_close and previous_close > 0:
+                    # Precio anterior también convertido a MXN
+                    if ticker.endswith(".MX"):
+                        prev_mxn = previous_close
+                    elif ticker.endswith(".HK"):
+                        prev_mxn = previous_close * fx_rates["HKD_MXN"]
+                    else:
+                        prev_mxn = previous_close * fx_rates["USD_MXN"]
+
+                    var_pct_dia = (price_mxn - prev_mxn) / prev_mxn * 100
+                    df.at[idx, "var_pct_dia"] = round(var_pct_dia, 2)
+                    df.at[idx, "ganancia_dia"] = round((price_mxn - prev_mxn) * row["titulos"], 2)
+                else:
+                    df.at[idx, "var_pct_dia"] = 0.0
+                    df.at[idx, "ganancia_dia"] = 0.0
             else:
                 warnings.append(f"⚠️ Sin datos para {ticker}")
+                df.at[idx, "var_pct_dia"] = 0.0
+                df.at[idx, "ganancia_dia"] = 0.0
+
         except Exception as e:
             warnings.append(f"⚠️ Error en {ticker}: {e}")
-        
+            df.at[idx, "var_pct_dia"] = 0.0
+            df.at[idx, "ganancia_dia"] = 0.0
+
         time.sleep(0.2)
 
-    # Recálculos
+    # === Recálculos finales (como antes) ===
     df["costo_total"] = df["costo_promedio"] * df["titulos"]
     df["ganancia_live"] = df["valor_mercado"] - df["costo_total"]
-    df["var_pct"] = (df["ganancia_live"] / df["costo_total"]) * 100
+    df["var_pct_total"] = (df["ganancia_live"] / df["costo_total"]) * 100  # Rendimiento total
 
     return df, warnings
