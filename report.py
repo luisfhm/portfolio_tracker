@@ -28,53 +28,37 @@ if not warnings:
 else:
     st.success("✅ Precios actualizados (con algunos fallbacks)")
 
+# --- Clasificar por mercado (ANTES de usar la columna "mercado") ---
+df["mercado"] = df["ticker"].apply(
+    lambda x: "México" if x.endswith(".MX") else "Global"
+)
+
 # --- Cálculo de ganancias/pérdidas del día ---
 st.markdown("### 💰 Ganancias y pérdidas del día")
 
-# Ganancia del día = valor_mercado_actual * (var_pct / 100)
+# Ganancia del día por posición (en dólares)
 df["ganancia_dia"] = df["valor_mercado"] * (df["var_pct"] / 100)
 
-# Resúmenes del día
+# Cálculos seguros
+total_valor = df["valor_mercado"].sum()
 ganancia_dia_total = df["ganancia_dia"].sum()
-ganancia_dia_mex = df[df["mercado"] == "México"]["ganancia_dia"].sum()
-ganancia_dia_global = df[df["mercado"] == "Global"]["ganancia_dia"].sum()
 
-# Porcentaje del día sobre el valor total del portafolio
-pct_dia_total = (ganancia_dia_total / df["valor_mercado"].sum()) * 100 if df["valor_mercado"].sum() > 0 else 0
+ganancia_dia_mex = df[df["mercado"] == "México"]["ganancia_dia"].sum() if not df[df["mercado"] == "México"].empty else 0
+ganancia_dia_global = df[df["mercado"] == "Global"]["ganancia_dia"].sum() if not df[df["mercado"] == "Global"].empty else 0
 
-# Métricas bonitas en columnas
+# Porcentaje del día (ponderado)
+pct_dia_total = (ganancia_dia_total / total_valor * 100) if total_valor > 0 else 0
+
+# Métricas del día
 col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-
 col_d1.metric(
     label="Ganancia del día (Total)",
     value=f"${ganancia_dia_total:,.0f}",
     delta=f"{pct_dia_total:+.2f}%"
 )
-
-col_d2.metric(
-    label="México (día)",
-    value=f"${ganancia_dia_mex:,.0f}",
-    delta=None
-)
-
-col_d3.metric(
-    label="Global (día)",
-    value=f"${ganancia_dia_global:,.0f}",
-    delta=None
-)
-
-# Variación promedio ponderada del portafolio hoy
-var_ponderada = pct_dia_total
-col_d4.metric(
-    label="Variación promedio del portafolio",
-    value=f"{var_ponderada:+.2f}%",
-    delta=None
-)
-
-# --- Clasificar por mercado ---
-df["mercado"] = df["ticker"].apply(
-    lambda x: "México" if x.endswith(".MX") else "Global"
-)
+col_d2.metric(label="México (día)", value=f"${ganancia_dia_mex:,.0f}")
+col_d3.metric(label="Global (día)", value=f"${ganancia_dia_global:,.0f}")
+col_d4.metric(label="Variación promedio portafolio", value=f"{pct_dia_total:+.2f}%")
 
 # --- Sidebar con filtros rápidos ---
 with st.sidebar:
@@ -117,7 +101,10 @@ top_perd = top_perdedoras(df).iloc[0]
 
 col_b1.metric("🏆 Mayor ganadora", f"{top_gan['ticker']}", f"{top_gan['var_pct']:.1f}%")
 col_b2.metric("📉 Mayor perdedora", f"{top_perd['ticker']}", f"{top_perd['var_pct']:.1f}%")
-col_b3.metric("🌍 Diversificación", f"{(df[df['mercado']=='México']['valor_mercado'].sum() / df['valor_mercado'].sum()*100):.1f}% México")
+col_b3.metric(
+    "🌍 Diversificación",
+    f"{(df[df['mercado']=='México']['valor_mercado'].sum() / total_valor * 100):.1f}% México"
+)
 
 # --- Resumen general + por mercado ---
 resumen_total = resumen_portafolio(df)
@@ -126,10 +113,13 @@ resumen_global = resumen_portafolio(df[df["mercado"] == "Global"])
 
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Inversión total", f"${resumen_total['total_inversion']:,.0f}")
-col2.metric("Valor actual total", f"${resumen_total['total_valor']:,.0f}",
-            delta=f"${resumen_total['ganancia_total']:,.0f}")
-col3.metric("México", f"${resumen_mex['total_valor']:,.0f}", delta=f"{(resumen_mex['ganancia_pct']):.1f}%")
-col4.metric("Global", f"${resumen_global['total_valor']:,.0f}", delta=f"{(resumen_global['ganancia_pct']):.1f}%")
+col2.metric(
+    "Valor actual total",
+    f"${resumen_total['total_valor']:,.0f}",
+    delta=f"${resumen_total['ganancia_total']:,.0f}"
+)
+col3.metric("México", f"${resumen_mex['total_valor']:,.0f}", delta=f"{resumen_mex['ganancia_pct']:.1f}%")
+col4.metric("Global", f"${resumen_global['total_valor']:,.0f}", delta=f"{resumen_global['ganancia_pct']:.1f}%")
 
 # --- Gráfico de distribución ---
 st.markdown("### 🥧 Distribución del portafolio")
@@ -144,17 +134,23 @@ fig = px.pie(
 fig.update_traces(textposition='inside', textinfo='percent+label')
 st.plotly_chart(fig, use_container_width=True)
 
-# --- Tabla filtrada ---
+# --- Tabla filtrada (con ganancia del día incluida) ---
 st.header(f"Posiciones detalladas ({len(df_filtered)} de {len(df)})")
-df_display = df_filtered[["ticker", "mercado", "titulos", "costo_promedio", "precio_mercado",
-                          "valor_mercado", "costo_total", "ganancia_live", "var_pct"]].copy()
+df_display = df_filtered[[
+    "ticker", "mercado", "titulos", "costo_promedio", "precio_mercado",
+    "valor_mercado", "costo_total", "ganancia_live", "ganancia_dia", "var_pct"
+]].copy()
 
-money_cols = ["costo_promedio", "precio_mercado", "valor_mercado", "costo_total", "ganancia_live"]
+money_cols = ["costo_promedio", "precio_mercado", "valor_mercado", "costo_total", "ganancia_live", "ganancia_dia"]
 for col in money_cols:
     df_display[col] = df_display[col].map("${:,.2f}".format)
 
 df_display["var_pct"] = df_display["var_pct"].map("{:.2f}%".format)
-st.dataframe(df_display, width="stretch")
+
+# Ordenar por ganancia del día (opcional, queda más útil)
+df_display = df_display.sort_values("ganancia_dia", ascending=False)
+
+st.dataframe(df_display, use_container_width=True)
 
 # --- Tops ---
 col_g, col_p = st.columns(2)
@@ -181,7 +177,6 @@ for o in ops:
 # --- Noticias y oportunidades similares ---
 st.header("📰 Noticias recientes y sugerencias")
 
-# Selector para ver noticias de un ticker específico (para no sobrecargar con todos)
 selected_ticker = st.selectbox("Seleccionar ticker para noticias y sugerencias", df_filtered["ticker"].unique())
 
 if selected_ticker:
@@ -192,15 +187,15 @@ if selected_ticker:
         with col_n:
             st.subheader("📰 Noticias recientes")
             news_list = fetch_ticker_news(selected_ticker)
-            if news_list and news_list[0]['title'] != 'Error cargando noticias':
+            if news_list and news_list[0].get('title') != 'Error cargando noticias':
                 for item in news_list:
                     st.markdown(f"**{item['title']}**")
                     st.caption(f"{item['publisher']} • [Ver artículo]({item['link']})")
-                    if item['snippet']:
+                    if item.get('snippet'):
                         st.write(item['snippet'])
                     st.divider()
             else:
-                st.info("No hay noticias recientes disponibles para este ticker (común en fines de semana o tickers menores).")
+                st.info("No hay noticias recientes disponibles para este ticker.")
         
         with col_s:
             st.subheader("💡 Oportunidades similares")
