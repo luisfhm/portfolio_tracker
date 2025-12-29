@@ -16,8 +16,8 @@ def resumen_portafolio(df):
 
 def top_ganadoras(df):
     """Top 5 por mayor rendimiento %."""
-    return df.sort_values("var_pct", ascending=False).head(5)
+    return df.sort_values("var_pct_total", ascending=False).head(5)
 
 def top_perdedoras(df):
     """Top 5 por mayor pérdida %."""
-    return df.sort_values("var_pct", ascending=True).head(5)
+    return df.sort_values("var_pct_total", ascending=True).head(5)
