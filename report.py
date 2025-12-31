@@ -106,7 +106,7 @@ if IS_DEMO:
 
     # Carga demo (ajusta el path si es necesario)
     try:
-        df = load_positions(path="demo.json")  # o el nombre que uses
+        df = load_positions(path="demo.json") 
     except Exception as e:
         st.error(f"No se pudo cargar demo.json: {e}")
         st.info("Asegúrate de que demo.json exista en la carpeta del proyecto.")
@@ -117,7 +117,7 @@ else:
         st.sidebar.success("✅ Modo REAL activado")
 
         try:
-            df = load_positions()  # carga real (sin path)
+            df = load_positions() 
             # Aquí puedes agregar fetch_live_prices, etc.
             df, warnings = fetch_live_prices(df)
             # Muestra warnings si existen

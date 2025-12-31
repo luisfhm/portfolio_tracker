@@ -1,0 +1,153 @@
+{
+  "global": [
+    {
+      "ticker": "1211.HK",
+      "titulos": 11,
+      "costo_promedio": 256.26,
+      "precio_mercado": 228.73,
+      "valor_mercado": 2516.08
+    },
+    {
+      "ticker": "AMZN",
+      "titulos": 1,
+      "costo_promedio": 3313.93,
+      "precio_mercado": 4220.36,
+      "valor_mercado": 4220.36
+    },
+    {
+      "ticker": "BKCH",
+      "titulos": 2,
+      "costo_promedio": 1076.00,
+      "precio_mercado": 1477.25,
+      "valor_mercado": 2954.51
+    },
+    {
+      "ticker": "BOTZ",
+      "titulos": 2,
+      "costo_promedio": 503.00,
+      "precio_mercado": 674.26,
+      "valor_mercado": 1348.52
+    },
+    {
+      "ticker": "GSG",
+      "titulos": 3,
+      "costo_promedio": 486.66,
+      "precio_mercado": 395.94,
+      "valor_mercado": 1187.83
+    },
+    {
+      "ticker": "HERO",
+      "titulos": 4,
+      "costo_promedio": 637.05,
+      "precio_mercado": 561.00,
+      "valor_mercado": 2244.01
+    },
+    {
+      "ticker": "ICLN",
+      "titulos": 6,
+      "costo_promedio": 408.50,
+      "precio_mercado": 304.81,
+      "valor_mercado": 1828.86
+    },
+    {
+      "ticker": "NIO",
+      "titulos": 8,
+      "costo_promedio": 437.68,
+      "precio_mercado": 91.58,
+      "valor_mercado": 641.12
+    },
+    {
+      "ticker": "NU",
+      "titulos": 3,
+      "costo_promedio": 139.50,
+      "precio_mercado": 303.89,
+      "valor_mercado": 911.69
+    },
+    {
+      "ticker": "SOCL",
+      "titulos": 1,
+      "costo_promedio": 1395.99,
+      "precio_mercado": 1019.79,
+      "valor_mercado": 1019.79
+    },
+    {
+      "ticker": "SPYM",
+      "titulos": 6,
+      "costo_promedio": 1049.86,
+      "precio_mercado": 1472.70,
+      "valor_mercado": 8836.22
+    },
+    {
+      "ticker": "VEA",
+      "titulos": 4,
+      "costo_promedio": 952.75,
+      "precio_mercado": 1138.75,
+      "valor_mercado": 4555.03
+    },
+    {
+      "ticker": "VWO",
+      "titulos": 3,
+      "costo_promedio": 940.22,
+      "precio_mercado": 993.45,
+      "valor_mercado": 2980.36
+    }
+  ],
+  "mexico": [
+    {
+      "ticker": "AGUA.MX",
+      "titulos": 130,
+      "costo_promedio": 23.68,
+      "precio_mercado": 12.53,
+      "valor_mercado": 1628.90
+    },
+    {
+      "ticker": "ALSEA.MX",
+      "titulos": 120,
+      "costo_promedio": 55.23,
+      "precio_mercado": 50.89,
+      "valor_mercado": 6106.80
+    },
+    {
+      "ticker": "CEMEXCPO.MX",
+      "titulos": 100,
+      "costo_promedio": 13.23,
+      "precio_mercado": 19.73,
+      "valor_mercado": 1973.00
+    },
+    {
+      "ticker": "FMTY14.MX",
+      "titulos": 550,
+      "costo_promedio": 9.28,
+      "precio_mercado": 15.28,
+      "valor_mercado": 8404.00
+    },
+    {
+      "ticker": "FUNO11.MX",
+      "titulos": 55,
+      "costo_promedio": 28.00,
+      "precio_mercado": 27.00,
+      "valor_mercado": 1350.00
+    },
+    {
+      "ticker": "GMXT.MX",
+      "titulos": 25,
+      "costo_promedio": 40.62,
+      "precio_mercado": 32.50,
+      "valor_mercado": 812.50
+    },
+    {
+      "ticker": "KOFUBL.MX",
+      "titulos": 40,
+      "costo_promedio": 145.28,
+      "precio_mercado": 166.89,
+      "valor_mercado": 6675.60
+    },
+    {
+      "ticker": "NAFTRACISHRS.MX",
+      "titulos": 90,
+      "costo_promedio": 48.50,
+      "precio_mercado": 63.69,
+      "valor_mercado": 5732.10
+    }
+  ]
+}
