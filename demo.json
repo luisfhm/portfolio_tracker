@@ -1,0 +1,42 @@
+{
+  "global": [
+    {
+      "ticker": "AMZN",
+      "titulos": 1,
+      "costo_promedio": 3313.93,
+      "precio_mercado": 4220.36,
+      "valor_mercado": 4220.36
+    },
+    
+    {
+      "ticker": "NIO",
+      "titulos": 8,
+      "costo_promedio": 50.68,
+      "precio_mercado": 91.58,
+      "valor_mercado": 641.12
+    },
+    {
+      "ticker": "NU",
+      "titulos": 3,
+      "costo_promedio": 139.50,
+      "precio_mercado": 303.89,
+      "valor_mercado": 911.69
+    }
+  ],
+  "mexico": [
+    {
+      "ticker": "ALSEA.MX",
+      "titulos": 120,
+      "costo_promedio": 55.23,
+      "precio_mercado": 50.89,
+      "valor_mercado": 6106.80
+    },
+    {
+      "ticker": "CEMEXCPO.MX",
+      "titulos": 100,
+      "costo_promedio": 13.23,
+      "precio_mercado": 19.73,
+      "valor_mercado": 1973.00
+    }
+  ]
+}
