@@ -114,7 +114,7 @@ if IS_DEMO:
 else:
     # Modo REAL
     if check_password():
-        st.sidebar.success("✅ Modo REAL activado")
+        st.sidebar.success("Modo REAL activado")
 
         try:
             df = load_positions() 
@@ -146,9 +146,9 @@ else:
     # Botón manual de refresh
     if st.button("🔄 Actualizar precios ahora"):
         st.cache_data.clear()  # Limpia cache para forzar refresh
+        st.write("🔄 Cargando precios en vivo desde Yahoo Finance...")
         st.rerun()
-
-    st.write("🔄 Cargando precios en vivo desde Yahoo Finance...")
+        
     df, warnings = fetch_live_prices(df)
 
     for warning in warnings:
@@ -165,7 +165,7 @@ else:
     )
 
     # --- Ganancias y pérdidas del día ---
-    st.markdown("### 💰 Ganancias y pérdidas del día")
+    st.markdown("### Ganancias y pérdidas del día")
 
     total_valor = df["valor_mercado"].sum()
     ganancia_dia_total = df["ganancia_dia"].sum()
@@ -182,9 +182,9 @@ else:
 
     # --- Sidebar: Filtros + Noticias ---
     with st.sidebar:
-        st.header("🔧 Filtros y Consultas Rápidas")
+        st.header(" Filtros y Consultas Rápidas")
         
-        search = st.text_input("🔍 Buscar ticker", placeholder="Ej: AMZN o CEMEXCPO")
+        search = st.text_input(" Buscar ticker", placeholder="Ej: AMZN o CEMEXCPO")
         
         var_min, var_max = st.slider(
             "Rango de variación diaria %",
@@ -200,7 +200,7 @@ else:
         st.divider()
         
         # --- Sección de Noticias en la sidebar ---
-        st.header("📰 Noticias del Ticker")
+        st.header(" Noticias del Ticker")
         
         # Selectbox para elegir ticker (ordenado alfabéticamente)
         ticker_options = sorted(df["ticker"].unique())
@@ -253,16 +253,16 @@ else:
         df_filtered = df_filtered[df_filtered["ganancia_live"] > 0]
 
     # --- Resumen rápido del día ---
-    st.markdown("### 🔥 Resumen rápido del día")
+    st.markdown("### Resumen rápido del día")
 
     top_gan = df.loc[df["var_pct_dia"].idxmax()]
     top_perd = df.loc[df["var_pct_dia"].idxmin()]
 
     col_b1, col_b2, col_b3 = st.columns(3)
-    col_b1.metric("🏆 Mayor ganadora hoy", f"{top_gan['ticker']}", f"{top_gan['var_pct_dia']:+.2f}%")
-    col_b2.metric("📉 Mayor perdedora hoy", f"{top_perd['ticker']}", f"{top_perd['var_pct_dia']:+.2f}%")
+    col_b1.metric("Mayor ganadora hoy", f"{top_gan['ticker']}", f"{top_gan['var_pct_dia']:+.2f}%")
+    col_b2.metric("Mayor perdedora hoy", f"{top_perd['ticker']}", f"{top_perd['var_pct_dia']:+.2f}%")
     col_b3.metric(
-        "🌍 Diversificación",
+        "Diversificación",
         f"{(df[df['mercado']=='México']['valor_mercado'].sum() / total_valor * 100):.1f}% México"
     )
 
@@ -306,21 +306,21 @@ else:
     # --- Top 5 del día ---
     col_g, col_p = st.columns(2)
     with col_g:
-        st.subheader("🏆 Top 5 Ganadoras Hoy")
+        st.subheader("Top 5 Ganadoras Hoy")
         top5_g = df_filtered.nlargest(5, "var_pct_dia")[["ticker", "var_pct_dia", "ganancia_dia"]]
         top5_g["ganancia_dia"] = top5_g["ganancia_dia"].map("${:,.2f}".format)
         top5_g["var_pct_dia"] = top5_g["var_pct_dia"].map("{:+.2f}%".format)
         st.dataframe(top5_g, use_container_width=True)
 
     with col_p:
-        st.subheader("📉 Top 5 Perdedoras Hoy")
+        st.subheader("Top 5 Perdedoras Hoy")
         top5_p = df_filtered.nsmallest(5, "var_pct_dia")[["ticker", "var_pct_dia", "ganancia_dia"]]
         top5_p["ganancia_dia"] = top5_p["ganancia_dia"].map("${:,.2f}".format)
         top5_p["var_pct_dia"] = top5_p["var_pct_dia"].map("{:+.2f}%".format)
         st.dataframe(top5_p, use_container_width=True)
 
     # --- Oportunidades ---
-    st.header("🔍 Oportunidades detectadas")
+    st.header(" Oportunidades detectadas")
     ops = detectar_oportunidades(df_filtered)
     for o in ops:
         st.write(o)
