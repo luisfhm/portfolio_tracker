@@ -106,14 +106,17 @@ CDMX_TZ = pytz.timezone('America/Mexico_City')
 # Obtenemos la hora actual en CDMX
 hoy = pd.Timestamp.now(tz=CDMX_TZ)
 
+# === Verificación del último cierre real vía API (mejorado) ===
 
 days_back = 0
-if hoy.day_name() == "Saturday":
-    days_back = 1
-elif hoy.day_name() == "Sunday":
-    days_back = 2
 
-ticker_prueba = "CEMEXCPO"
+# Ajuste inicial por fin de semana
+if hoy.day_name() in ["Saturday", "Domingo"]:
+    if hoy.day_name() == "Saturday":
+        days_back = 1
+    elif hoy.day_name() == "Sunday":
+        days_back = 2
+
 token = get_databursatil_token()
 
 if token.strip():
@@ -121,25 +124,57 @@ if token.strip():
         base_url = "https://api.databursatil.com/v2/historicos"
         final_prueba = hoy.strftime("%Y-%m-%d")
         inicio_prueba = (hoy - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+        
         url_prueba = f"{base_url}?token={token}&inicio={inicio_prueba}&final={final_prueba}&emisora_serie={ticker_prueba}"
         response = requests.get(url_prueba, timeout=8)
         
         if response.status_code == 200:
             data = response.json()
+            
             if isinstance(data, dict) and data:
-                fechas = list(data.keys())
-                if fechas:
-                    ultima_fecha = max(pd.to_datetime(fechas))
+                # Las fechas vienen como strings → las convertimos y les ponemos la misma zona horaria que 'hoy'
+                fechas_aware = []
+                for fecha_str in data.keys():
+                    try:
+                        # Asumimos que las fechas del API son en formato YYYY-MM-DD
+                        dt = pd.Timestamp(fecha_str).tz_localize(CDMX_TZ)
+                        fechas_aware.append(dt)
+                    except Exception as e:
+                        st.warning(f"Fecha inválida en API: {fecha_str} → {e}")
+                        continue
+                
+                if fechas_aware:
+                    ultima_fecha = max(fechas_aware)
+                    
+                    # Ahora ambas son timezone-aware → la resta es segura
                     dias_reales = (hoy - ultima_fecha).days
+                    
+                    # Si han pasado más días de los esperados → ajustamos days_back
                     if dias_reales > days_back:
-                        days_back = dias_reales + 1
-                        
+                        days_back = dias_reales + 1  # +1 para incluir el día del último cierre
+                    
+                    # Límite de seguridad (evitar retroceder demasiado)
+                    days_back = min(days_back, 15)
+                    
+                else:
+                    st.info("No se encontraron fechas válidas en la respuesta del API")
+            else:
+                st.warning("La respuesta de la API no es un diccionario válido o está vacía")
+                
+        else:
+            st.warning(f"Error en API: status {response.status_code} - {response.reason}")
+            
+    except requests.Timeout:
+        st.warning("Timeout al consultar la API de Databursatil (8s)")
     except Exception as e:
-        st.warning(f"No se pudo verificar último cierre real: {e} → usando days_back base")
+        st.warning(f"No se pudo verificar último cierre real: {str(e)} → usando days_back base")
 
+# === Cálculo de la fecha del último cierre ===
 last_close_date = hoy - pd.Timedelta(days=days_back)
-market_close_time = last_close_date.replace(hour=15, minute=0, second=0)
-last_close = market_close_time.strftime('%H:%M:%S')
+market_close_time = last_close_date.replace(hour=15, minute=0, second=0, microsecond=0)
+
+# Formato de hora solo HH:MM (sin segundos si no es necesario)
+last_close = market_close_time.strftime('%H:%M')
 
 # --- Formato en español ---
 dias_español = {
@@ -155,12 +190,18 @@ dia_nombre = dias_español.get(hoy.day_name(), hoy.day_name())
 mes_nombre = meses_español.get(hoy.month, "Mes desconocido")
 fecha_formateada = f"{dia_nombre}, {hoy.day} de {mes_nombre} de {hoy.year}"
 
+# Mostrar información
 st.markdown(
     f"<div style='font-size:1.1rem; color:#555; margin-bottom:1.5rem;'>"
-    f"**Hoy es** {fecha_formateada} | **Último cierre:** {last_close_date.strftime('%Y-%m-%d')} a las {last_close} hrs"
+    f"**Hoy es** {fecha_formateada} | "
+    f"**Último cierre:** {last_close_date.strftime('%Y-%m-%d')} a las {last_close} hrs"
     f"</div>",
     unsafe_allow_html=True
 )
+
+# Opcional: mostrar diagnóstico (puedes quitarlo en producción)
+if st.session_state.get("debug", False):
+    st.caption(f"days_back calculado = {days_back} | tz de hoy = {hoy.tz}")
 
 # === Selector de modo ===
 st.sidebar.header("Modo de Visualización")
