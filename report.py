@@ -118,7 +118,7 @@ if hoy.day_name() in ["Saturday", "Domingo"]:
         days_back = 2
 
 token = get_databursatil_token()
-
+ticker_prueba = "AMXL.MX"  
 if token.strip():
     try:
         base_url = "https://api.databursatil.com/v2/historicos"
