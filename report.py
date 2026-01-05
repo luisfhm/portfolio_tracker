@@ -10,6 +10,8 @@ import hashlib
 import os
 import requests
 from dotenv import load_dotenv
+import pytz
+
 
 load_dotenv()
 
@@ -98,8 +100,18 @@ def check_password():
 st.set_page_config(page_title="Luis – Tracker Pro", layout="wide")
 st.title("📈 Portfolio Tracker Pro – Precios en Vivo")
 
-# === Fecha y lógica de cierre (sin cambios) ===
-hoy = pd.Timestamp.now()
+# Definimos la zona horaria de CDMX una sola vez
+CDMX_TZ = pytz.timezone('America/Mexico_City')
+
+# Obtenemos la hora actual en CDMX
+hoy = pd.Timestamp.now(tz=CDMX_TZ).tz_convert(None)          # quitamos el tzinfo para que siga siendo naive como antes
+# Alternativa más explícita: 
+# hoy = pd.Timestamp.now(tz=CDMX_TZ).floor('s')   # si quieres redondear a segundo
+
+# O si prefieres datetime + pytz (muy común también):
+# from datetime import datetime
+# hoy = datetime.now(CDMX_TZ)
+
 days_back = 0
 if hoy.day_name() == "Saturday":
     days_back = 1
@@ -108,6 +120,7 @@ elif hoy.day_name() == "Sunday":
 
 ticker_prueba = "CEMEXCPO"
 token = get_databursatil_token()
+
 if token.strip():
     try:
         base_url = "https://api.databursatil.com/v2/historicos"
@@ -115,6 +128,7 @@ if token.strip():
         inicio_prueba = (hoy - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
         url_prueba = f"{base_url}?token={token}&inicio={inicio_prueba}&final={final_prueba}&emisora_serie={ticker_prueba}"
         response = requests.get(url_prueba, timeout=8)
+        
         if response.status_code == 200:
             data = response.json()
             if isinstance(data, dict) and data:
@@ -124,6 +138,7 @@ if token.strip():
                     dias_reales = (hoy - ultima_fecha).days
                     if dias_reales > days_back:
                         days_back = dias_reales + 1
+                        
     except Exception as e:
         st.warning(f"No se pudo verificar último cierre real: {e} → usando days_back base")
 
@@ -131,6 +146,7 @@ last_close_date = hoy - pd.Timedelta(days=days_back)
 market_close_time = last_close_date.replace(hour=15, minute=0, second=0)
 last_close = market_close_time.strftime('%H:%M:%S')
 
+# --- Formato en español ---
 dias_español = {
     'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
     'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
@@ -139,9 +155,11 @@ meses_español = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
 }
+
 dia_nombre = dias_español.get(hoy.day_name(), hoy.day_name())
 mes_nombre = meses_español.get(hoy.month, "Mes desconocido")
 fecha_formateada = f"{dia_nombre}, {hoy.day} de {mes_nombre} de {hoy.year}"
+
 st.markdown(
     f"<div style='font-size:1.1rem; color:#555; margin-bottom:1.5rem;'>"
     f"**Hoy es** {fecha_formateada} | **Último cierre:** {last_close_date.strftime('%Y-%m-%d')} a las {last_close} hrs"
