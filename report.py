@@ -101,16 +101,11 @@ st.set_page_config(page_title="Luis – Tracker Pro", layout="wide")
 st.title("📈 Portfolio Tracker Pro – Precios en Vivo")
 
 # Definimos la zona horaria de CDMX una sola vez
-CDMX_TZ = pytz.timezone('US/Eastern')
+CDMX_TZ = pytz.timezone('America/Mexico_City')
 
 # Obtenemos la hora actual en CDMX
-hoy = pd.Timestamp.now(tz=CDMX_TZ).tz_convert(None)          # quitamos el tzinfo para que siga siendo naive como antes
-# Alternativa más explícita: 
-# hoy = pd.Timestamp.now(tz=CDMX_TZ).floor('s')   # si quieres redondear a segundo
+hoy = pd.Timestamp.now(tz=CDMX_TZ)
 
-# O si prefieres datetime + pytz (muy común también):
-# from datetime import datetime
-# hoy = datetime.now(CDMX_TZ)
 
 days_back = 0
 if hoy.day_name() == "Saturday":
