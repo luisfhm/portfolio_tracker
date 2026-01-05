@@ -124,7 +124,6 @@ if token.strip():
                     dias_reales = (hoy - ultima_fecha).days
                     if dias_reales > days_back:
                         days_back = dias_reales + 1
-                        st.info(f"Ajustando days_back a {days_back} (último cierre real: {ultima_fecha.date()})")
     except Exception as e:
         st.warning(f"No se pudo verificar último cierre real: {e} → usando days_back base")
 
