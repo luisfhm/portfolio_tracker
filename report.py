@@ -111,13 +111,11 @@ hoy = pd.Timestamp.now(tz=CDMX_TZ)
 days_back = 0
 
 # Ajuste inicial por fin de semana
-if hoy.day_name() in ["Saturday", "Domingo"]:
+if hoy.day_name() in ["Saturday", "Sunday"]:
     if hoy.day_name() == "Saturday":
         days_back = 1
     elif hoy.day_name() == "Sunday":
         days_back = 2
-    elif hoy.day_name() == "Monday":
-        days_back = 4
 token = get_databursatil_token()
 ticker_prueba = "CEMEXCPO"  # Ticker mexicano común para prueba
 if token.strip():
@@ -243,7 +241,7 @@ else:
 if df.empty:
     st.error("❌ No se encontraron posiciones en el portafolio. Por favor, añade algunas en el archivo correspondiente.")
 else:
-    token = get_databursatil_token()
+    token = get_databursatil_token(debug=st.session_state.get("debug", False))
     if not token.strip():
         st.error("❌ Token de DataBursatil no configurado.")
         st.info("Las actualizaciones de precios no funcionarán hasta que configures DATABURSATIL_TOKEN.")

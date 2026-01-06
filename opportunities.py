@@ -15,29 +15,28 @@ def detectar_oportunidades(df):
 
         # 1. Caídas fuertes desde compra (oportunidad de promediar o salir)
         if var_total < -25:
-            ops.append(f"🔻 {ticker} -{abs(var_total):.1f}% desde tu compra. Considera promediar o revisar fundamentos.")
+            ops.append(f"🔻 {ticker} -{abs(var_total):.2f}% desde tu compra. Considera promediar o revisar fundamentos.")
         elif var_total < -15:
-            ops.append(f"🔻 {ticker} -{abs(var_total):.1f}% desde tu compra. Posible oportunidad de acumulación si sigue tendencia.")
+            ops.append(f"🔻 {ticker} -{abs(var_total):.2f}% desde tu compra. Posible oportunidad de acumulación si sigue tendencia.")
 
         # 2. Ganancias fuertes (tomar utilidades parciales)
         if var_total > 40:
-            ops.append(f"🟢 {ticker} +{var_total:.1f}% desde tu compra. Podrías vender parcial (20-30%) para asegurar ganancias.")
+            ops.append(f"🟢 {ticker} +{var_total:.2f}% desde tu compra. Podrías vender parcial (20-30%) para asegurar ganancias.")
         elif var_total > 25:
-            ops.append(f"🟢 {ticker} +{var_total:.1f}% desde tu compra. Buen momento para evaluar salida parcial.")
+            ops.append(f"🟢 {ticker} +{var_total:.2f}% desde tu compra. Buen momento para evaluar salida parcial.")
 
         # 3. Movimiento intradía fuerte (usando var_pct_dia)
         if var_dia > 5:
-            ops.append(f"🚀 {ticker} +{var_dia:.1f}% hoy. Momentum alcista intradía → posible continuación o toma de ganancias.")
+            ops.append(f"🚀 {ticker} +{var_dia:.2f}% hoy. Momentum alcista intradía → posible continuación o toma de ganancias.")
         elif var_dia < -5:
-            ops.append(f"📉 {ticker} -{abs(var_dia):.1f}% hoy. Movimiento bajista intradía → vigila si es sobreventa o cambio de tendencia.")
+            ops.append(f"📉 {ticker} -{abs(var_dia):.2f}% hoy. Movimiento bajista intradía → vigila si es sobreventa o cambio de tendencia.")
 
         # 4. Rebotando tras caída (señal de posible reversión)
         if var_dia > 2 and var_total < -10:
-            ops.append(f"📈 {ticker} rebotando +{var_dia:.1f}% hoy tras caída acumulada. Posible señal de reversión.")
-
+            ops.append(f"📈 {ticker} rebotando +{var_dia:.2f}% hoy tras caída acumulada. Posible señal de reversión.")
         # 5. Consolidación o lateralidad (poca variación intradía)
         if abs(var_dia) < 1:
-            ops.append(f"➡️ {ticker} lateral hoy (±{var_dia:.1f}%). Esperando catalizador o ruptura.")
+            ops.append(f"➡️ {ticker} lateral hoy (±{var_dia:.2f}%). Esperando catalizador o ruptura.")
 
     # Mensaje por defecto si no hay señales fuertes
     if not ops:

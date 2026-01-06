@@ -11,77 +11,67 @@ load_dotenv()  # Para .env en desarrollo local
 
 from typing import Optional
 
-def get_databursatil_token() -> str:
+def get_databursatil_token(debug: bool = False) -> str:
     """
-    Obtiene el token de DataBursatil de forma robusta.
-    Prioridades (en orden):
-    1. st.secrets["DATABURSATIL_TOKEN"]           → formato directo root
-    2. st.secrets["databursatil"]["token"]        → formato sección
-    3. os.getenv("DATABURSATIL_TOKEN")            → variable de entorno
-    4. os.getenv("DATABURSATIL_TOKEN".lower())    → tolerancia a minúsculas (raro pero pasa)
+    Obtiene el token de DataBursatil de forma robusta y compatible con:
+    - Local: .streamlit/secrets.toml o .env
+    - Cloud: secrets en dashboard de Streamlit
 
-    Retorna cadena vacía si todo falla.
-    Muestra mensajes de diagnóstico en la app (solo si falla o debug activado).
+    Prioridades:
+    1. st.secrets["DATABURSATIL_TOKEN"]          → formato directo (más común en cloud)
+    2. st.secrets["databursatil"]["token"]       → formato sección
+    3. os.getenv("DATABURSATIL_TOKEN")           → .env local o manual
+
+    Parámetro debug=True muestra más información en la app.
     """
-    token_candidates = []
+    token = None
+    source = "ninguna"
 
-    # 1. Intentos con st.secrets (prioridad en cloud y local con secrets.toml)
+    # 1. Intentar st.secrets (funciona en cloud y local con secrets.toml)
     try:
-        # Formato directo: DATABURSATIL_TOKEN = "..."
-        direct = st.secrets.get("DATABURSATIL_TOKEN")
-        if direct and isinstance(direct, str) and direct.strip():
-            token_candidates.append(("st.secrets[DATABURSATIL_TOKEN]", direct.strip()))
-    except Exception as e:
-        token_candidates.append(("st.secrets[DATABURSATIL_TOKEN]", f"Error: {str(e)}"))
+        # Formato directo (recomendado)
+        token = st.secrets.get("DATABURSATIL_TOKEN")
+        if token and isinstance(token, str) and token.strip():
+            source = "st.secrets[DATABURSATIL_TOKEN]"
+    except Exception:
+        pass
 
-    try:
-        # Formato sección: [databursatil] token = "..."
-        section = st.secrets.get("databursatil", {})
-        if isinstance(section, dict):
-            section_token = section.get("token")
-            if section_token and isinstance(section_token, str) and section_token.strip():
-                token_candidates.append(("st.secrets[databursatil][token]", section_token.strip()))
-    except Exception as e:
-        token_candidates.append(("st.secrets[databursatil]", f"Error: {str(e)}"))
-
-    # 2. Variables de entorno (local con .env o manual)
-    env_keys = ["DATABURSATIL_TOKEN", "databursatil_token", "DATABURSATIL_TOKEN".lower()]
-    for key in env_keys:
+    if not token:
         try:
-            value = os.getenv(key)
-            if value and value.strip():
-                token_candidates.append((f"os.getenv({key})", value.strip()))
+            # Formato sección
+            section = st.secrets.get("databursatil", {})
+            if isinstance(section, dict):
+                token = section.get("token")
+                if token and isinstance(token, str) and token.strip():
+                    source = "st.secrets[databursatil][token]"
         except Exception:
             pass
 
-    # Seleccionar el primer token válido encontrado
-    for source, value in token_candidates:
-        if isinstance(value, str) and value.strip():
-            # Éxito silencioso (o con caption si debug)
-            if st.session_state.get("debug_token", False):
-                st.caption(f"Token cargado desde: {source} (longitud: {len(value)})")
-            return value.strip()
+    # 2. Fallback a variables de entorno (.env local)
+    if not token:
+        token = os.getenv("DATABURSATIL_TOKEN", "").strip()
+        if token:
+            source = "os.getenv(DATABURSATIL_TOKEN)"
 
-    # Fallo total → diagnóstico visible
-    debug_msg = [
-        "🚨 No se pudo cargar el token de DataBursatil",
-        "Fuentes probadas:"
-    ]
-    for source, value in token_candidates:
-        if "Error" in str(value):
-            debug_msg.append(f"  • {source}: {value}")
+    # 3. Último intento: key en minúsculas (raro pero a veces pasa por error de tipeo)
+    if not token:
+        token = os.getenv("databursatil_token", "").strip()
+        if token:
+            source = "os.getenv(databursatil_token)"
+
+    # Feedback según debug
+    if debug:
+        if token:
+            st.caption(f"[DEBUG] Token cargado desde: {source} (longitud: {len(token)})")
         else:
-            debug_msg.append(f"  • {source}: {'[vacío]' if not value else '[encontrado pero inválido]'}")
+            st.caption("[DEBUG] No se encontró token en ninguna fuente")
 
-    debug_msg.append("\nAcciones recomendadas:")
-    debug_msg.append("1. Verifica Secrets en dashboard → DATABURSATIL_TOKEN=tu-token")
-    debug_msg.append("2. Haz Reboot app después de guardar")
-    debug_msg.append("3. Confirma que no hay espacios ni enters extras")
+    # Si no hay token y no estamos en debug → warning suave (solo una vez)
+    if not token and not debug and "token_warning_shown" not in st.session_state:
+        st.session_state.token_warning_shown = True
+        st.warning("No se encontró token de DataBursatil. Las consultas intradía usarán yfinance.")
 
-    st.warning("\n".join(debug_msg))
-
-    return ""
-
+    return token.strip() if token else ""
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
     """
@@ -133,11 +123,6 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         # 1. Preparar ticker para DataBursatil (limpio, sin .MX/.HK, con * si internacional)
         # ────────────────────────────────────────────────────────────────
         ticker_db = ticker_original
-        # Quitar sufijos que DataBursatil no usa
-        ticker_db = ticker_db.replace(".MX", "").replace(".HK", "").replace("*", "")
-        # Si NO es mexicano (no tenía .MX originalmente), agregar * (estilo AMZN*, AAPL*)
-        if not ticker_original.endswith(".MX"):
-            ticker_db += "*"
 
         url = (
             f"{base_url}?"
@@ -185,7 +170,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                 df.at[idx, "var_pct_dia"] = 0.0
                 df.at[idx, "ganancia_dia"] = 0.0
 
-            st.caption(f"✓ {ticker_original} → DataBursatil ({ticker_db}) OK")
+            st.caption(f"✓ {ticker_original} → DataBursatil ({ticker_db})")
 
         except Exception as e:
             error_msg = f"{ticker_original}: {str(e)}"
@@ -194,12 +179,13 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
             error_details.append(error_msg)
             fallback_count += 1
             fallback_tickers.append(ticker_original)
-
+        
+        print(success_db)
         # ────────────────────────────────────────────────────────────────
         # 2. Fallback yfinance → usa ticker con sufijo correcto
         # ────────────────────────────────────────────────────────────────
         if not success_db:
-            ticker_yf = ticker_original.replace("*", "")  # solo quita *, mantiene .MX / .HK
+            ticker_yf = ticker_original.replace("*", ".MX")
 
             try:
                 yf_obj = yf.Ticker(ticker_yf)
@@ -233,7 +219,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                         df.at[idx, "var_pct_dia"] = round(var_pct, 2)
                         df.at[idx, "ganancia_dia"] = round((price_mxn - prev_mxn) * row["titulos"], 2)
 
-                    st.caption(f"→ {ticker_original} ({ticker_yf}) → yfinance fallback OK")
+                    st.caption(f"→ {ticker_original} ({ticker_yf}) → yfinance fallback")
                 else:
                     raise ValueError("Sin precio válido en yfinance")
 
@@ -245,11 +231,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
 
     # Reporte final
     if fallback_count > 0:
-        warnings.append(f"DataBursatil falló en {fallback_count}/{len(df)} tickers")
-        if error_details:
-            warnings.append("Detalles:")
-            for d in error_details:
-                warnings.append(f"  • {d}")
+        warnings.append(f"DataBursatil falló en {fallback_count}/{len(df)} tickers, se usó yfinance: {', '.join(fallback_tickers)}")
 
     # Recálculos
     df["costo_total"] = df["costo_promedio"] * df["titulos"]
