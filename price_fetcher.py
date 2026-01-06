@@ -89,7 +89,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
 
         # === DataBursatil ===
         try:
-            response = requests.get(url, timeout=12)
+            response = requests.get(url, timeout=30)
             response.raise_for_status()
 
             data = response.json()
