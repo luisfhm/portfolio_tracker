@@ -116,7 +116,8 @@ if hoy.day_name() in ["Saturday", "Sunday"]:
         days_back = 1
     elif hoy.day_name() == "Sunday":
         days_back = 2
-token = get_databursatil_token()
+token = get_databursatil_token(debug=st.session_state.get("debug", False))
+print(token)
 ticker_prueba = "CEMEXCPO"  # Ticker mexicano común para prueba
 if token.strip():
     try:
