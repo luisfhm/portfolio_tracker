@@ -9,21 +9,77 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Para .env en desarrollo local
 
-def get_databursatil_token():
-    """Obtiene el token de secrets (cloud) o .env (local)"""
+from typing import Optional
+
+def get_databursatil_token() -> str:
+    """
+    Obtiene el token de DataBursatil de forma robusta.
+    Prioridades (en orden):
+    1. st.secrets["DATABURSATIL_TOKEN"]           → formato directo root
+    2. st.secrets["databursatil"]["token"]        → formato sección
+    3. os.getenv("DATABURSATIL_TOKEN")            → variable de entorno
+    4. os.getenv("DATABURSATIL_TOKEN".lower())    → tolerancia a minúsculas (raro pero pasa)
+
+    Retorna cadena vacía si todo falla.
+    Muestra mensajes de diagnóstico en la app (solo si falla o debug activado).
+    """
+    token_candidates = []
+
+    # 1. Intentos con st.secrets (prioridad en cloud y local con secrets.toml)
     try:
-        if "DATABURSATIL_TOKEN" in st.secrets:
-            return st.secrets["DATABURSATIL_TOKEN"]
-        if "databursatil" in st.secrets and "token" in st.secrets.databursatil:
-            return st.secrets.databursatil.token
-    except Exception:
-        pass
+        # Formato directo: DATABURSATIL_TOKEN = "..."
+        direct = st.secrets.get("DATABURSATIL_TOKEN")
+        if direct and isinstance(direct, str) and direct.strip():
+            token_candidates.append(("st.secrets[DATABURSATIL_TOKEN]", direct.strip()))
+    except Exception as e:
+        token_candidates.append(("st.secrets[DATABURSATIL_TOKEN]", f"Error: {str(e)}"))
 
-    token_env = os.getenv("DATABURSATIL_TOKEN")
-    if token_env:
-        return token_env
+    try:
+        # Formato sección: [databursatil] token = "..."
+        section = st.secrets.get("databursatil", {})
+        if isinstance(section, dict):
+            section_token = section.get("token")
+            if section_token and isinstance(section_token, str) and section_token.strip():
+                token_candidates.append(("st.secrets[databursatil][token]", section_token.strip()))
+    except Exception as e:
+        token_candidates.append(("st.secrets[databursatil]", f"Error: {str(e)}"))
 
-    st.warning("⚠️ No se encontró token de DataBursatil → fallback completo a yfinance")
+    # 2. Variables de entorno (local con .env o manual)
+    env_keys = ["DATABURSATIL_TOKEN", "databursatil_token", "DATABURSATIL_TOKEN".lower()]
+    for key in env_keys:
+        try:
+            value = os.getenv(key)
+            if value and value.strip():
+                token_candidates.append((f"os.getenv({key})", value.strip()))
+        except Exception:
+            pass
+
+    # Seleccionar el primer token válido encontrado
+    for source, value in token_candidates:
+        if isinstance(value, str) and value.strip():
+            # Éxito silencioso (o con caption si debug)
+            if st.session_state.get("debug_token", False):
+                st.caption(f"Token cargado desde: {source} (longitud: {len(value)})")
+            return value.strip()
+
+    # Fallo total → diagnóstico visible
+    debug_msg = [
+        "🚨 No se pudo cargar el token de DataBursatil",
+        "Fuentes probadas:"
+    ]
+    for source, value in token_candidates:
+        if "Error" in str(value):
+            debug_msg.append(f"  • {source}: {value}")
+        else:
+            debug_msg.append(f"  • {source}: {'[vacío]' if not value else '[encontrado pero inválido]'}")
+
+    debug_msg.append("\nAcciones recomendadas:")
+    debug_msg.append("1. Verifica Secrets en dashboard → DATABURSATIL_TOKEN=tu-token")
+    debug_msg.append("2. Haz Reboot app después de guardar")
+    debug_msg.append("3. Confirma que no hay espacios ni enters extras")
+
+    st.warning("\n".join(debug_msg))
+
     return ""
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
