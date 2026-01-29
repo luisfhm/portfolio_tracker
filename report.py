@@ -117,7 +117,20 @@ if hoy.day_name() in ["Saturday", "Sunday"]:
     elif hoy.day_name() == "Sunday":
         days_back = 2
 token = get_databursatil_token(debug=st.session_state.get("debug", False))
-print(token)
+
+
+# DEBUG TOKEN AVANZADO
+st.markdown("**DEBUG TOKEN AVANZADO**")
+st.write("Token raw (primeros 10 + últimos 4):")
+if token:
+    st.code(f"{token[:10]}...{token[-4:]}")
+    st.write(f"Longitud exacta: {len(token)}")
+    st.write("¿Empieza con comillas? ", token.startswith(('"', "'")))
+    st.write("¿Contiene espacios? ", " " in token)
+else:
+    st.error("Token completamente vacío")
+
+# Luego continúa con fetch_live_prices(df, token=token, ...)
 ticker_prueba = "CEMEXCPO"  # Ticker mexicano común para prueba
 if token.strip():
     try:
