@@ -242,7 +242,6 @@ else:
 if df.empty:
     st.error("❌ No se encontraron posiciones en el portafolio. Por favor, añade algunas en el archivo correspondiente.")
 else:
-    token = get_databursatil_token(debug=st.session_state.get("debug", False))
     if not token.strip():
         st.error("❌ Token de DataBursatil no configurado.")
         st.info("Las actualizaciones de precios no funcionarán hasta que configures DATABURSATIL_TOKEN.")
