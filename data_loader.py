@@ -5,48 +5,63 @@ import pandas as pd
 
 def load_positions(path=None):
     """
-    Carga posiciones desde archivo (local) o desde secrets (cloud).
-    - Si se da `path`, se carga desde archivo (ej: demo.json o positions.json).
-    - Si no se da `path`, intenta cargar desde secrets (modo real en cloud).
-      Si no hay secrets (ej: ejecución local sin path), intenta cargar positions.json.
+    Carga posiciones desde:
+    - Archivo explícito si se pasa `path` (ej: demo.json)
+    - st.secrets["REAL_POSITIONS_JSON"] si existe (modo real en cloud)
+    - positions.json local si no hay secrets ni path (modo real local)
     """
-    if path is not None:
-        # Cargar desde archivo explícito (ej: demo.json)
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    else:
-        # Modo "real": intentar secrets primero, luego archivo local
-        data = None
+    data = None
 
-        # 1. Intentar desde Streamlit secrets (solo en cloud o local con secrets)
+    if path is not None:
+        # Modo demo o prueba explícita
+        file_path = path
+    else:
+        # Modo real: primero secrets, luego archivo local
         try:
             import streamlit as st
             if "REAL_POSITIONS_JSON" in st.secrets:
                 json_str = st.secrets["REAL_POSITIONS_JSON"]
                 data = json.loads(json_str)
         except Exception:
-            pass  # st.secrets no disponible o falló
+            pass  # No estamos en Streamlit o no hay secrets
 
-        # 2. Si no hay secrets, intentar desde archivo local positions.json
         if data is None:
-            local_path = "positions.json"
-            if os.path.exists(local_path):
-                with open(local_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            else:
-                raise FileNotFoundError(
-                    "No se encontró positions.json en local ni REAL_POSITIONS_JSON en secrets."
-                )
+            file_path = "positions.json"
+        else:
+            # Ya tenemos data desde secrets → no necesitamos abrir archivo
+            pass
 
-    # Normalizar a DataFrame
+    # Si no vino de secrets, cargar desde archivo
+    if data is None:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(
+                f"No se encontró el archivo: {file_path}\n"
+                "Asegúrate de tener 'positions.json' (modo real local) o 'demo.json' (modo demo), "
+                "o configura REAL_POSITIONS_JSON en Streamlit Secrets (modo real cloud)."
+            )
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+    # Construir DataFrame con columna "mercado" correcta desde el origen
     rows = []
-    for item in data.get("global", []):
-        item = item.copy()
-        item["mercado"] = "Global"
-        rows.append(item)
-    for item in data.get("mexico", []):
-        item = item.copy()
-        item["mercado"] = "México"
-        rows.append(item)
 
-    return pd.DataFrame(rows)
+    for item in data.get("global", []):
+        row = item.copy()
+        row["mercado"] = "Global"
+        rows.append(row)
+
+    for item in data.get("mexico", []):
+        row = item.copy()
+        row["mercado"] = "México"
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    if df.empty:
+        raise ValueError("El JSON no contiene posiciones válidas en 'global' ni 'mexico'.")
+
+    # Aseguramos tipos básicos
+    df["titulos"] = pd.to_numeric(df["titulos"], errors="coerce")
+    df["costo_promedio"] = pd.to_numeric(df["costo_promedio"], errors="coerce")
+
+    return df
