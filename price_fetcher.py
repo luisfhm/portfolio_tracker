@@ -146,6 +146,13 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                 raise ValueError("Sin token → saltando DataBursatil")
 
             resp = requests.get(url, timeout=30)
+            # Debug clave
+            st.caption(f"[DEBUG-DB] Ticker: {ticker_db} | Status: {resp.status_code}")
+            if resp.status_code != 200:
+                st.caption(f"[DEBUG-DB] Error body: {resp.text[:300]}")  # muestra mensaje de error
+            else:
+                st.caption(f"[DEBUG-DB] Respuesta OK - Claves principales: {list(resp.json().keys())}")
+            
             resp.raise_for_status()
             data = resp.json()
 
