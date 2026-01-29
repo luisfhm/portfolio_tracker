@@ -6,7 +6,8 @@ import time
 import streamlit as st
 import os
 from dotenv import load_dotenv
-
+from typing import Optional
+import pytz  # Agregado para manejar zonas horarias
 load_dotenv()  # Para .env en desarrollo local
 
 from typing import Optional
@@ -82,10 +83,11 @@ def get_databursatil_token(debug: bool = False) -> str:
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
     """
-    Todos los tickers intentan DataBursatil PRIMERO con el valor EXACTO del JSON.
+    Intenta DataBursatil con el ticker EXACTO tal como está en el JSON.
     Si falla → reintenta variantes (sin *, sin .MX, etc.).
     Si aún falla → fallback a yfinance.
     Debug de URL y status en cada intento.
+    Usa zona horaria de CDMX para evitar desfase en cloud.
     """
     if token is None:
         token = get_databursatil_token()
@@ -109,13 +111,19 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
 
     base_url = "https://api.databursatil.com/v2/intradia"
 
-    hoy = datetime.now().date()
+    # ────────────────────────────────────────────────────────────────
+    # Fuerza zona horaria de CDMX para hoy (evita desfase en cloud)
+    # ────────────────────────────────────────────────────────────────
+    CDMX_TZ = pytz.timezone('America/Mexico_City')
+    hoy = datetime.now(CDMX_TZ).date()
     final = hoy.strftime("%Y-%m-%d")
     inicio_dt = hoy - timedelta(days=days_back)
     inicio = inicio_dt.strftime("%Y-%m-%d")
 
     if inicio_dt > hoy:
-        inicio = final
+        inicio = final  # Nunca futuro
+
+    st.caption(f"[DEBUG] Fecha calculada en CDMX: inicio={inicio}, final={final}")
 
     warnings = []
     fallback_count = 0
@@ -131,7 +139,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         success_db = False
 
         # Intento 1: ticker EXACTO como está en el JSON
-        ticker_db = ticker_original  # sin cambios iniciales
+        ticker_db = ticker_original
         url = (
             f"{base_url}?"
             f"token={token}&"
@@ -184,7 +192,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         except Exception as e1:
             st.caption(f"[DEBUG-DB] Intento 1 falló: {str(e1)}")
 
-            # Variantes: sin *, sin .MX
+            # Reintento con variantes
             variants = []
             if "*" in ticker_db:
                 variants.append(ticker_db.replace("*", ""))
@@ -228,7 +236,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                         df.at[idx, "ganancia_dia"] = 0.0
 
                     st.caption(f"✓ {ticker_original} → DataBursatil (variante {variant})")
-                    break  # éxito, salimos del loop de variantes
+                    break
 
                 except Exception as ev:
                     st.caption(f"[DEBUG-DB] Variante {variant} falló: {str(ev)}")
@@ -236,7 +244,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
             if not success_db:
                 fallback_count += 1
                 fallback_tickers.append(ticker_original)
-                st.caption(f"→ {ticker_original}: Fallaron todos los intentos → yfinance")
+                st.caption(f"→ {ticker_original}: Fallaron los intentos en DataBursatil → yfinance")
 
         # Fallback yfinance
         if not success_db:
@@ -270,7 +278,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                     df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
 
                     if prev_yf and prev_mxn > 0:
-                        var_pct = (price_mxn - prev_mxn) / prev_mxn * 100
+                        var_pct = (price_mxn - prev_price) / prev_mxn * 100
                         df.at[idx, "var_pct_dia"] = round(var_pct, 2)
                         df.at[idx, "ganancia_dia"] = round((price_mxn - prev_mxn) * row["titulos"], 2)
 
