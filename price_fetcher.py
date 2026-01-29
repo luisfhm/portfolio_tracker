@@ -82,16 +82,16 @@ def get_databursatil_token(debug: bool = False) -> str:
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
     """
-    Prioridad: DataBursatil con ticker limpio → fallback yfinance con ticker + sufijo.
+    Prioridad: DataBursatil para tickers mexicanos válidos → fallback yfinance para todo lo demás.
+    Evita intentar DataBursatil con tickers internacionales como AMZN*, que causan 400.
     """
     if token is None:
         token = get_databursatil_token()
 
-    if not token or len(token) < 8:  # chequeo mínimo razonable
-        st.warning("Token de DataBursatil no válido o demasiado corto → fallback completo a yfinance")
-        token = ""
+    if not token.strip():
+        st.warning("Sin token válido de DataBursatil → fallback completo a yfinance")
 
-    # Tipos de cambio (fallback hardcoded si falla yfinance)
+    # Tipos de cambio (fallback hardcoded si falla)
     if fx_rates is None:
         fx_rates = {}
         try:
@@ -126,79 +126,86 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         if not ticker_original:
             continue
 
-        # Preparar ticker para DataBursatil (sin .MX/.HK, con * si internacional)
-        ticker_db = ticker_original.replace(".MX", "").replace(".HK", "")
-
-        url = (
-            f"{base_url}?"
-            f"token={token}&"
-            f"intervalo={intervalo}&"
-            f"inicio={inicio}&"
-            f"final={final}&"
-            f"emisora_serie={ticker_db}&"
-            f"bolsa=BMV"
-        )
+        # ────────────────────────────────────────────────────────────────
+        # Detección de si es ticker mexicano válido para DataBursatil
+        # ────────────────────────────────────────────────────────────────
+        is_mexican = False
+        if row.get("mercado") == "México":
+            is_mexican = True
+        elif "*" in ticker_original and ticker_original not in ["AMZN*", "AAPL*", "GOOGL*", "TSLA*", "NFLX*"]:
+            is_mexican = True  # ej: ALSEA*, WALMEX*, etc.
+        elif ticker_original.endswith(".MX"):
+            is_mexican = True
 
         success_db = False
 
-        try:
-            if not token:
-                raise ValueError("Sin token → saltando DataBursatil")
+        if is_mexican:
+            ticker_db = ticker_original.replace("*", "").replace(".MX", "")
+            url = (
+                f"{base_url}?"
+                f"token={token}&"
+                f"intervalo={intervalo}&"
+                f"inicio={inicio}&"
+                f"final={final}&"
+                f"emisora_serie={ticker_db}&"
+                f"bolsa=BMV"  # Puedes probar "BMV,BIVA" si necesitas más cobertura
+            )
 
-            resp = requests.get(url, timeout=30)
-            # Debug clave
-            st.caption(f"[DEBUG-DB] Ticker: {ticker_db} | Status: {resp.status_code}")
-            if resp.status_code != 200:
-                st.caption(f"[DEBUG-DB] Error body: {resp.text[:300]}")  # muestra mensaje de error
-            else:
-                st.caption(f"[DEBUG-DB] Respuesta OK - Claves principales: {list(resp.json().keys())}")
-            
-            resp.raise_for_status()
-            data = resp.json()
+            try:
+                resp = requests.get(url, timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
 
-            if not isinstance(data, dict) or not data:
-                raise ValueError("Respuesta vacía o inválida")
+                if not isinstance(data, dict) or not data:
+                    raise ValueError("Respuesta vacía o inválida")
 
-            # Buscar clave (con y sin *)
-            ticker_key = ticker_db
-            ticker_data = data.get(ticker_key) or data.get(ticker_db.replace("*", ""))
-            if not ticker_data or not isinstance(ticker_data, dict):
-                raise KeyError(f"No datos para {ticker_key}")
+                # Buscar clave (con y sin *)
+                ticker_key = ticker_db
+                ticker_data = data.get(ticker_key) or data.get(ticker_original.replace("*", ""))
+                if not ticker_data or not isinstance(ticker_data, dict):
+                    raise KeyError(f"No datos para {ticker_key}")
 
-            ts_sorted = sorted(ticker_data.keys(), reverse=True)
-            if not ts_sorted:
-                raise ValueError("Sin timestamps")
+                ts_sorted = sorted(ticker_data.keys(), reverse=True)
+                if not ts_sorted:
+                    raise ValueError("Sin timestamps")
 
-            last_price = float(ticker_data[ts_sorted[0]])
-            prev_price = float(ticker_data[ts_sorted[1]]) if len(ts_sorted) >= 2 else None
+                last_price = float(ticker_data[ts_sorted[0]])
+                prev_price = float(ticker_data[ts_sorted[1]]) if len(ts_sorted) >= 2 else None
 
-            success_db = True
-            price_mxn = last_price
-            df.at[idx, "precio_mercado"] = round(price_mxn, 4)
-            df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
+                success_db = True
+                price_mxn = last_price
+                df.at[idx, "precio_mercado"] = round(price_mxn, 4)
+                df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
 
-            if prev_price and prev_price > 0:
-                var_pct = (price_mxn - prev_price) / prev_price * 100
-                df.at[idx, "var_pct_dia"] = round(var_pct, 2)
-                df.at[idx, "ganancia_dia"] = round((price_mxn - prev_price) * row["titulos"], 2)
-            else:
-                df.at[idx, "var_pct_dia"] = 0.0
-                df.at[idx, "ganancia_dia"] = 0.0
+                if prev_price and prev_price > 0:
+                    var_pct = (price_mxn - prev_price) / prev_price * 100
+                    df.at[idx, "var_pct_dia"] = round(var_pct, 2)
+                    df.at[idx, "ganancia_dia"] = round((price_mxn - prev_price) * row["titulos"], 2)
+                else:
+                    df.at[idx, "var_pct_dia"] = 0.0
+                    df.at[idx, "ganancia_dia"] = 0.0
 
-            st.caption(f"✓ {ticker_original} → DataBursatil ({ticker_db})")
+                st.caption(f"✓ {ticker_original} → DataBursatil ({ticker_db})")
 
-        except Exception as e:
-            error_msg = f"{ticker_original}: {str(e)}"
-            if hasattr(e, 'response') and e.response is not None:
-                error_msg += f" (HTTP {e.response.status_code})"
+            except Exception as e:
+                error_msg = f"{ticker_original}: {str(e)}"
+                if hasattr(e, 'response') and e.response is not None:
+                    error_msg += f" (HTTP {e.response.status_code})"
+                warnings.append(error_msg)
+                fallback_count += 1
+                fallback_tickers.append(ticker_original)
+
+        else:
+            # Internacional o no reconocido → directo a yfinance
+            st.caption(f"→ {ticker_original} (internacional / no BMV) → yfinance directo")
             fallback_count += 1
             fallback_tickers.append(ticker_original)
-            # No imprimimos todos los errores para no saturar, pero se guardan en warnings al final
 
-        # Fallback yfinance
+        # ────────────────────────────────────────────────────────────────
+        # Fallback yfinance (si no se obtuvo éxito con DataBursatil)
+        # ────────────────────────────────────────────────────────────────
         if not success_db:
-            # Intentamos con sufijo .MX por default (puedes ajustar según tu portafolio)
-            ticker_yf = ticker_original.replace("*", ".MX")
+            ticker_yf = ticker_original.replace("*", "")
 
             try:
                 yf_obj = yf.Ticker(ticker_yf)
@@ -214,10 +221,10 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                         prev_yf = hist["Close"].iloc[-2] if len(hist) >= 2 else last_yf
 
                 if last_yf is not None and pd.notna(last_yf):
-                    if ".MX" in ticker_yf:
+                    if ".MX" in ticker_original:
                         price_mxn = last_yf
                         prev_mxn = prev_yf if prev_yf else last_yf
-                    elif ".HK" in ticker_yf:
+                    elif ".HK" in ticker_original:
                         price_mxn = last_yf * fx_rates["HKD_MXN"]
                         prev_mxn = prev_yf * fx_rates["HKD_MXN"] if prev_yf else price_mxn
                     else:
@@ -232,24 +239,24 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
                         df.at[idx, "var_pct_dia"] = round(var_pct, 2)
                         df.at[idx, "ganancia_dia"] = round((price_mxn - prev_mxn) * row["titulos"], 2)
 
-                    st.caption(f"→ {ticker_original} ({ticker_yf}) → yfinance fallback")
+                    st.caption(f"→ {ticker_original} ({ticker_yf}) → yfinance")
                 else:
                     raise ValueError("Sin precio válido en yfinance")
 
             except Exception as yf_err:
                 warnings.append(f"⚠️ yfinance falló para {ticker_original}: {str(yf_err)}")
 
-        time.sleep(0.8)  # evita rate limiting
+        time.sleep(0.8)
 
     # Reporte final
     if fallback_count > 0:
         warnings.append(
-            f"DataBursatil falló en {fallback_count}/{len(df)} tickers → yfinance usado: {', '.join(fallback_tickers)}"
+            f"DataBursatil falló / no intentó en {fallback_count}/{len(df)} tickers: {', '.join(fallback_tickers)}"
         )
 
-    # Recálculos globales
+    # Recálculos
     df["costo_total"] = df["costo_promedio"] * df["titulos"]
     df["ganancia_live"] = df["valor_mercado"] - df["costo_total"]
-    df["var_pct_total"] = df["ganancia_live"] / df["costo_total"] * 100
+    df["var_pct_total"] = df["ganancia_live"] / df["costo_total"] * 100 if df["costo_total"].sum() > 0 else 0
 
     return df, warnings
