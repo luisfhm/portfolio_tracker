@@ -82,8 +82,10 @@ def get_databursatil_token(debug: bool = False) -> str:
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
     """
-    Intenta DataBursatil para tickers con *, fallback a yfinance en 400 o error.
-    Compatible con comportamiento local (intentaba intradía para AMZN* etc.).
+    Todos los tickers intentan DataBursatil PRIMERO con el valor EXACTO del JSON.
+    Si falla → reintenta variantes (sin *, sin .MX, etc.).
+    Si aún falla → fallback a yfinance.
+    Debug de URL y status en cada intento.
     """
     if token is None:
         token = get_databursatil_token()
@@ -126,79 +128,119 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         if not ticker_original:
             continue
 
-        # Siempre intenta DataBursatil si tiene *, como en local
-        use_db = "*" in ticker_original or row.get("mercado") == "México" or ticker_original.endswith(".MX")
-
         success_db = False
 
-        if use_db:
-            ticker_db = ticker_original.replace("*", "").replace(".MX", "")
-            url = (
-                f"{base_url}?"
-                f"token={token}&"
-                f"intervalo={intervalo}&"
-                f"inicio={inicio}&"
-                f"final={final}&"
-                f"emisora_serie={ticker_db}&"
-                f"bolsa=BMV"  # Prueba "BMV,BIVA" si quieres
-            )
+        # Intento 1: ticker EXACTO como está en el JSON
+        ticker_db = ticker_original  # sin cambios iniciales
+        url = (
+            f"{base_url}?"
+            f"token={token}&"
+            f"intervalo={intervalo}&"
+            f"inicio={inicio}&"
+            f"final={final}&"
+            f"emisora_serie={ticker_db}&"
+            f"bolsa=BMV"
+        )
 
-            try:
-                resp = requests.get(url, timeout=30)
-                resp.raise_for_status()
-                data = resp.json()
+        debug_url = url.replace(token, "TOKEN_OCULTO")
+        st.caption(f"[DEBUG-DB] Intento 1 (tal cual JSON): {debug_url} para {ticker_original}")
 
-                if not isinstance(data, dict) or not data:
-                    raise ValueError("Respuesta vacía o inválida")
+        try:
+            resp = requests.get(url, timeout=30)
+            st.caption(f"[DEBUG-DB] Status intento 1: {resp.status_code}")
 
-                ticker_key = ticker_db
-                ticker_data = data.get(ticker_key) or data.get(ticker_original.replace("*", ""))
-                if not ticker_data or not isinstance(ticker_data, dict):
-                    raise KeyError(f"No datos para {ticker_key}")
+            resp.raise_for_status()
+            data = resp.json()
 
-                ts_sorted = sorted(ticker_data.keys(), reverse=True)
-                if not ts_sorted:
-                    raise ValueError("Sin timestamps")
+            if not isinstance(data, dict) or not data:
+                raise ValueError("Respuesta vacía o inválida")
 
-                last_price = float(ticker_data[ts_sorted[0]])
-                prev_price = float(ticker_data[ts_sorted[1]]) if len(ts_sorted) >= 2 else None
+            ticker_data = data.get(ticker_db)
+            if not ticker_data or not isinstance(ticker_data, dict):
+                raise KeyError(f"No datos para {ticker_db}")
 
-                success_db = True
-                price_mxn = last_price
-                df.at[idx, "precio_mercado"] = round(price_mxn, 4)
-                df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
+            ts_sorted = sorted(ticker_data.keys(), reverse=True)
+            if not ts_sorted:
+                raise ValueError("Sin timestamps")
 
-                if prev_price and prev_price > 0:
-                    var_pct = (price_mxn - prev_price) / prev_price * 100
-                    df.at[idx, "var_pct_dia"] = round(var_pct, 2)
-                    df.at[idx, "ganancia_dia"] = round((price_mxn - prev_price) * row["titulos"], 2)
-                else:
-                    df.at[idx, "var_pct_dia"] = 0.0
-                    df.at[idx, "ganancia_dia"] = 0.0
+            last_price = float(ticker_data[ts_sorted[0]])
+            prev_price = float(ticker_data[ts_sorted[1]]) if len(ts_sorted) >= 2 else None
 
-                st.caption(f"✓ {ticker_original} → DataBursatil ({ticker_db})")
+            success_db = True
+            price_mxn = last_price
+            df.at[idx, "precio_mercado"] = round(price_mxn, 4)
+            df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
 
-            except requests.exceptions.HTTPError as http_err:
-                if resp.status_code == 400 and "no arrojo" in resp.text.lower():
-                    # Caso específico: no encontrado → fallback silencioso
-                    st.caption(f"→ {ticker_original} no encontrado en DataBursatil → yfinance")
-                else:
-                    st.caption(f"[ERROR-DB] {ticker_original}: HTTP {resp.status_code}")
+            if prev_price and prev_price > 0:
+                var_pct = (price_mxn - prev_price) / prev_price * 100
+                df.at[idx, "var_pct_dia"] = round(var_pct, 2)
+                df.at[idx, "ganancia_dia"] = round((price_mxn - prev_price) * row["titulos"], 2)
+            else:
+                df.at[idx, "var_pct_dia"] = 0.0
+                df.at[idx, "ganancia_dia"] = 0.0
+
+            st.caption(f"✓ {ticker_original} → DataBursatil (tal cual: {ticker_db})")
+
+        except Exception as e1:
+            st.caption(f"[DEBUG-DB] Intento 1 falló: {str(e1)}")
+
+            # Variantes: sin *, sin .MX
+            variants = []
+            if "*" in ticker_db:
+                variants.append(ticker_db.replace("*", ""))
+            if ".MX" in ticker_db:
+                variants.append(ticker_db.replace(".MX", ""))
+
+            for var_num, variant in enumerate(variants, start=2):
+                url_var = url.replace(ticker_db, variant)
+                debug_url_var = url_var.replace(token, "TOKEN_OCULTO")
+                st.caption(f"[DEBUG-DB] Intento {var_num} (variante: {variant}): {debug_url_var}")
+
+                try:
+                    resp_var = requests.get(url_var, timeout=30)
+                    st.caption(f"[DEBUG-DB] Status intento {var_num}: {resp_var.status_code}")
+
+                    resp_var.raise_for_status()
+                    data = resp_var.json()
+
+                    ticker_data = data.get(variant)
+                    if not ticker_data or not isinstance(ticker_data, dict):
+                        raise KeyError(f"No datos para {variant}")
+
+                    ts_sorted = sorted(ticker_data.keys(), reverse=True)
+                    if not ts_sorted:
+                        raise ValueError("Sin timestamps")
+
+                    last_price = float(ticker_data[ts_sorted[0]])
+                    prev_price = float(ticker_data[ts_sorted[1]]) if len(ts_sorted) >= 2 else None
+
+                    success_db = True
+                    price_mxn = last_price
+                    df.at[idx, "precio_mercado"] = round(price_mxn, 4)
+                    df.at[idx, "valor_mercado"] = round(price_mxn * row["titulos"], 2)
+
+                    if prev_price and prev_price > 0:
+                        var_pct = (price_mxn - prev_price) / prev_price * 100
+                        df.at[idx, "var_pct_dia"] = round(var_pct, 2)
+                        df.at[idx, "ganancia_dia"] = round((price_mxn - prev_price) * row["titulos"], 2)
+                    else:
+                        df.at[idx, "var_pct_dia"] = 0.0
+                        df.at[idx, "ganancia_dia"] = 0.0
+
+                    st.caption(f"✓ {ticker_original} → DataBursatil (variante {variant})")
+                    break  # éxito, salimos del loop de variantes
+
+                except Exception as ev:
+                    st.caption(f"[DEBUG-DB] Variante {variant} falló: {str(ev)}")
+
+            if not success_db:
                 fallback_count += 1
                 fallback_tickers.append(ticker_original)
-            except Exception as e:
-                st.caption(f"[ERROR-DB] {ticker_original}: {str(e)}")
-                fallback_count += 1
-                fallback_tickers.append(ticker_original)
+                st.caption(f"→ {ticker_original}: Fallaron todos los intentos → yfinance")
 
-        else:
-            st.caption(f"→ {ticker_original} (no *) → yfinance directo")
-            fallback_count += 1
-            fallback_tickers.append(ticker_original)
-
-        # Fallback yfinance si no éxito en DB
+        # Fallback yfinance
         if not success_db:
-            ticker_yf = ticker_original.replace("*", "")
+            ticker_yf = ticker_original.replace("*", "").replace(".MX", "")
 
             try:
                 yf_obj = yf.Ticker(ticker_yf)
@@ -243,7 +285,7 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
 
     # Reporte final
     if fallback_count > 0:
-        warnings.append(f"yfinance usado en {fallback_count}/{len(df)} tickers (incluye no encontrados en DataBursatil): {', '.join(fallback_tickers)}")
+        warnings.append(f"yfinance usado en {fallback_count}/{len(df)} tickers: {', '.join(fallback_tickers)}")
 
     # Recálculos
     df["costo_total"] = df["costo_promedio"] * df["titulos"]
