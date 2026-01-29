@@ -12,9 +12,11 @@ import requests
 from dotenv import load_dotenv
 import pytz
 
+# Fuerza siempre CDMX (America/Mexico_City)
+CDMX_TZ = pytz.timezone('America/Mexico_City')
 
-load_dotenv()
-
+# Reemplaza datetime.now() por esto
+hoy = pd.Timestamp.now(tz=CDMX_TZ).date() 
 # === Estilos CSS personalizados ===
 st.markdown("""
 <style>
