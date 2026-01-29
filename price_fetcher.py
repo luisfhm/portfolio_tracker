@@ -59,19 +59,26 @@ def get_databursatil_token(debug: bool = False) -> str:
         if token:
             source = "os.getenv(databursatil_token)"
 
+    # Limpieza final: quitar comillas dobles o simples si vienen incluidas (muy común en secrets.toml)
+    if token:
+        token = token.strip()
+        if token.startswith(('"', "'")) and token.endswith(('"', "'")):
+            token = token[1:-1].strip()  # quita comillas de ambos lados
+
     # Feedback según debug
     if debug:
         if token:
-            st.caption(f"[DEBUG] Token cargado desde: {source} (longitud: {len(token)})")
+            st.caption(f"[DEBUG] Token cargado desde: {source} | longitud: {len(token)} | primeros 6: {token[:6]}...")
         else:
             st.caption("[DEBUG] No se encontró token en ninguna fuente")
 
-    # Si no hay token y no estamos en debug → warning suave (solo una vez)
+    # Warning suave si no hay token (solo una vez)
     if not token and not debug and "token_warning_shown" not in st.session_state:
         st.session_state.token_warning_shown = True
         st.warning("No se encontró token de DataBursatil. Las consultas intradía usarán yfinance.")
 
-    return token.strip() if token else ""
+    return token if token else ""
+
 
 def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None):
     """
@@ -80,10 +87,11 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
     if token is None:
         token = get_databursatil_token()
 
-    if not token.strip():
-        st.warning("Sin token válido de DataBursatil → fallback completo a yfinance")
+    if not token or len(token) < 8:  # chequeo mínimo razonable
+        st.warning("Token de DataBursatil no válido o demasiado corto → fallback completo a yfinance")
+        token = ""
 
-    # Tipos de cambio
+    # Tipos de cambio (fallback hardcoded si falla yfinance)
     if fx_rates is None:
         fx_rates = {}
         try:
@@ -108,7 +116,6 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         inicio = final
 
     warnings = []
-    error_details = []
     fallback_count = 0
     fallback_tickers = []
 
@@ -119,10 +126,8 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         if not ticker_original:
             continue
 
-        # ────────────────────────────────────────────────────────────────
-        # 1. Preparar ticker para DataBursatil (limpio, sin .MX/.HK, con * si internacional)
-        # ────────────────────────────────────────────────────────────────
-        ticker_db = ticker_original
+        # Preparar ticker para DataBursatil (sin .MX/.HK, con * si internacional)
+        ticker_db = ticker_original.replace(".MX", "").replace(".HK", "")
 
         url = (
             f"{base_url}?"
@@ -137,6 +142,9 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
         success_db = False
 
         try:
+            if not token:
+                raise ValueError("Sin token → saltando DataBursatil")
+
             resp = requests.get(url, timeout=30)
             resp.raise_for_status()
             data = resp.json()
@@ -176,15 +184,13 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
             error_msg = f"{ticker_original}: {str(e)}"
             if hasattr(e, 'response') and e.response is not None:
                 error_msg += f" (HTTP {e.response.status_code})"
-            error_details.append(error_msg)
             fallback_count += 1
             fallback_tickers.append(ticker_original)
-        
-        print(success_db)
-        # ────────────────────────────────────────────────────────────────
-        # 2. Fallback yfinance → usa ticker con sufijo correcto
-        # ────────────────────────────────────────────────────────────────
+            # No imprimimos todos los errores para no saturar, pero se guardan en warnings al final
+
+        # Fallback yfinance
         if not success_db:
+            # Intentamos con sufijo .MX por default (puedes ajustar según tu portafolio)
             ticker_yf = ticker_original.replace("*", ".MX")
 
             try:
@@ -225,15 +231,16 @@ def fetch_live_prices(df, token=None, days_back=7, intervalo="1m", fx_rates=None
 
             except Exception as yf_err:
                 warnings.append(f"⚠️ yfinance falló para {ticker_original}: {str(yf_err)}")
-                # Deja ceros o valores anteriores
 
-        time.sleep(0.8)
+        time.sleep(0.8)  # evita rate limiting
 
     # Reporte final
     if fallback_count > 0:
-        warnings.append(f"DataBursatil falló en {fallback_count}/{len(df)} tickers, se usó yfinance: {', '.join(fallback_tickers)}")
+        warnings.append(
+            f"DataBursatil falló en {fallback_count}/{len(df)} tickers → yfinance usado: {', '.join(fallback_tickers)}"
+        )
 
-    # Recálculos
+    # Recálculos globales
     df["costo_total"] = df["costo_promedio"] * df["titulos"]
     df["ganancia_live"] = df["valor_mercado"] - df["costo_total"]
     df["var_pct_total"] = df["ganancia_live"] / df["costo_total"] * 100
