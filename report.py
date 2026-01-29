@@ -266,7 +266,7 @@ else:
                 st.info("Mostrando datos sin actualización reciente.")
 
     # === Clasificación por mercado ===
-    #df["mercado"] = df["ticker"].apply(lambda x: "México" if x.endswith(".MX") else "Global")
+    df["mercado"] = df["ticker"].apply(lambda x: "México" if x.endswith(".MX") else "Global")
 
     # === Ganancias del día ===
     st.markdown("### 💰 Ganancias y pérdidas del día")
