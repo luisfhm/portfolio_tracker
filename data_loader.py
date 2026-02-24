@@ -6,8 +6,7 @@ import os
 import pandas as pd
 from supabase import create_client
 
-SUPABASE_URL = "https://daejqnsqdxojntogzxtw.supabase.co"
-SUPABASE_KEY = "sb_publishable_vu2kZ157VRVQMuyJeoaH9Q_X9tFfejQ"
+from config import SUPABASE_URL, SUPABASE_KEY
 
 def get_supabase():
     """Crea cliente Supabase"""
