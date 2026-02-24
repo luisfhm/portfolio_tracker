@@ -4,12 +4,8 @@ from price_fetcher import fetch_live_prices, get_databursatil_token
 from portfolio import resumen_portafolio
 from opportunities import detectar_oportunidades
 from news_fetcher import fetch_ticker_news_rss, suggest_similar_opportunities
-from auth import require_auth, is_logged_in, login_form, logout, init_session_state
-from portfolio_manager import show_portfolio_manager
 import plotly.express as px
-import plotly.graph_objects as go
 import pandas as pd
-import numpy as np
 import hashlib
 import os
 import requests
@@ -79,54 +75,31 @@ def get_real_password():
     return env_pwd
 
 def check_password():
-    """Usa autenticación de Supabase"""
-    return is_logged_in()
+    real_pwd = get_real_password()
+    if real_pwd is None:
+        st.error("⚠️ No se encontró REAL_PORTFOLIO_PASSWORD ni en secrets ni en .env")
+        st.info("Configura REAL_PORTFOLIO_PASSWORD en Streamlit Secrets o en un archivo .env local.")
+        return False
+
+    if "auth_real" not in st.session_state:
+        st.session_state.auth_real = False
+
+    if st.session_state.auth_real:
+        return True
+
+    st.sidebar.markdown("### 🔐 Acceso al Portafolio Real")
+    input_pwd = st.sidebar.text_input("Contraseña:", type="password", key="real_pwd_input")
+    if st.sidebar.button("Entrar al portafolio real"):
+        if hashlib.sha256(input_pwd.encode()).hexdigest() == hashlib.sha256(real_pwd.encode()).hexdigest():
+            st.session_state.auth_real = True
+            st.sidebar.success("✅ Acceso concedido")
+            st.rerun()
+        else:
+            st.sidebar.error("❌ Contraseña incorrecta")
+    return False
 
 # === Configuración de página ===
 st.set_page_config(page_title="Luis – Tracker Pro", layout="wide")
-
-# Inicializar estado de sesión
-init_session_state()
-
-# Si no está logueado ni en demo, mostrar login
-if not is_logged_in() and not st.session_state.get('demo_mode', False):
-    login_form()
-    st.stop()
-
-# Si está en demo mode, mostrar modo demo
-if st.session_state.get('demo_mode', False):
-    st.markdown('<div class="demo-watermark">DEMO</div>', unsafe_allow_html=True)
-    st.sidebar.warning("🔒 Modo DEMO – Regístrate para tu portafolio")
-    if st.sidebar.button("Ir a Login / Registrarse"):
-        st.session_state.demo_mode = False
-        st.rerun()
-    try:
-        df = load_positions(path="demo.json")
-    except Exception as e:
-        st.error(f"No se pudo cargar demo.json: {e}")
-        df = pd.DataFrame()
-else:
-    # Usuario logueado - cargar portafolio real
-    st.session_state.demo_mode = False  # Clear demo mode
-    st.sidebar.success("✅ Portfolio real")
-    if st.sidebar.button("⚙️ Gestionar Activos"):
-        st.session_state.show_manager = True
-    if st.sidebar.button("🚪 Cerrar sesión"):
-        logout()
-    try:
-        df = load_positions()
-    except Exception as e:
-        st.error(f"Error al cargar portafolio: {e}")
-        df = pd.DataFrame()
-
-# Mostrar gestor de portafolio si se solicitó
-if st.session_state.get('show_manager', False):
-    show_portfolio_manager()
-    if st.button("🔙 Volver"):
-        st.session_state.show_manager = False
-        st.rerun()
-    st.stop()
-
 st.title("📈 Portfolio Tracker Pro – Precios en Vivo")
 
 # Definimos la zona horaria de CDMX una sola vez
@@ -234,32 +207,43 @@ if st.session_state.get("debug", False):
     st.caption(f"days_back calculado = {days_back} | tz de hoy = {hoy.tz}")
 
 # === Selector de modo ===
-# Mostrar según estado de autenticación
-if is_logged_in():
-    # Usuario logueado - cargar portafolio real
-    st.sidebar.success("✅ Portfolio real")
-    try:
-        df = load_positions()
-    except Exception as e:
-        st.error(f"Error al cargar portafolio: {e}")
-        df = pd.DataFrame()
-else:
-    # No logueado - mostrar demo
+st.sidebar.header("Modo de Visualización")
+modo = st.sidebar.radio(
+    "Seleccionar portafolio",
+    options=["Mi Portafolio Real", "Modo Demo (ficticio)"],
+    index=1
+)
+IS_DEMO = (modo == "Modo Demo (ficticio)")
+
+if IS_DEMO:
     st.markdown('<div class="demo-watermark">DEMO</div>', unsafe_allow_html=True)
-    st.sidebar.warning("🔒 Modo DEMO – Regístrate para ver tu portafolio")
+    st.sidebar.warning("🔒 Modo DEMO activado – Datos 100% ficticios")
+    st.markdown("### Modo DEMO – Portafolio de Ejemplo")
+    st.caption("Datos completamente inventados. No representan ninguna posición real.")
     try:
         df = load_positions(path="demo.json")
     except Exception as e:
         st.error(f"No se pudo cargar demo.json: {e}")
         df = pd.DataFrame()
+else:
+    if check_password():
+        st.sidebar.success("Modo REAL activado")
+        try:
+            df = load_positions()
+        except Exception as e:
+            st.error(f"Error al cargar portafolio real: {e}")
+            df = pd.DataFrame()
+        if st.sidebar.button("Cerrar sesión (volver a demo)"):
+            st.session_state.auth_real = False
+            st.rerun()
+    else:
+        st.info("🔒 Ingresa la contraseña en la sidebar para ver tu portafolio real.")
+        st.markdown("---")
+        st.caption("El modo demo está disponible sin contraseña.")
+        df = pd.DataFrame()
 
 if df.empty:
-    st.warning("📊 No hay activos en tu portafolio.")
-    st.info("Ve a **Gestionar Activos** en el sidebar para agregar tus posiciones.")
-    if st.button("Ir a Gestionar Activos"):
-        st.session_state.show_manager = True
-        st.rerun()
-    st.stop()
+    st.error("❌ No se encontraron posiciones en el portafolio. Por favor, añade algunas en el archivo correspondiente.")
 else:
     if not token.strip():
         st.error("❌ Token de DataBursatil no configurado.")
@@ -374,91 +358,6 @@ else:
     col2.metric("Valor actual", f"${resumen_total['total_valor']:,.0f}", f"${resumen_total['ganancia_total']:,.0f}")
     col3.metric("México", f"${resumen_mex['total_valor']:,.0f}", f"{resumen_mex['ganancia_pct']:.1f}%")
     col4.metric("Global", f"${resumen_global['total_valor']:,.0f}", f"{resumen_global['ganancia_pct']:.1f}%")
-
-    # === Histórico del Portafolio ===
-    st.markdown("### 📈 Histórico del Portafolio")
-    history_path = "history/portfolio_history.csv"
-    
-    if os.path.exists(history_path):
-        try:
-            df_history = pd.read_csv(history_path, index_col=0)
-            df_history.index = pd.to_datetime(df_history.index)
-            df_history.index.name = 'Date'
-            
-            # Métricas
-            col_h1, col_h2, col_h3, col_h4 = st.columns(4)
-            
-            # Calcular métricas
-            start_val = df_history['portfolio_value'].iloc[0]
-            end_val = df_history['portfolio_value'].iloc[-1]
-            total_ret = (end_val / start_val - 1) * 100
-            
-            # Volatilidad
-            daily_ret = df_history['daily_return'].dropna()
-            vol = daily_ret.std() * np.sqrt(252) * 100
-            
-            # Max drawdown
-            cum_ret = (1 + daily_ret).cumprod()
-            running_max = cum_ret.cummax()
-            drawdown = (cum_ret - running_max) / running_max
-            max_dd = drawdown.min() * 100
-            
-            with col_h1:
-                st.metric("Return Total", f"{total_ret:+.1f}%")
-            with col_h2:
-                st.metric("Volatilidad", f"{vol:.1f}%")
-            with col_h3:
-                st.metric("Max Drawdown", f"{max_dd:.1f}%")
-            with col_h4:
-                st.metric("Días tracked", f"{len(df_history)}")
-            
-            # Gráfico comparativo
-            st.markdown("#### Evolución del Portafolio (base 100)")
-            
-            # Crear gráfico con plotly
-            fig_hist = go.Figure()
-            
-            # Portafolio normalizado
-            fig_hist.add_trace(go.Scatter(
-                x=df_history.index,
-                y=df_history['portfolio_normalized'],
-                mode='lines',
-                name='Tu Portafolio',
-                line=dict(color='#00CC96', width=2)
-            ))
-            
-            # Benchmarks
-            for col in df_history.columns:
-                if 'benchmark' in col:
-                    benchmark_name = col.replace('benchmark_', '')
-                    fig_hist.add_trace(go.Scatter(
-                        x=df_history.index,
-                        y=df_history[col],
-                        mode='lines',
-                        name=benchmark_name,
-                        line=dict(width=1.5, dash='dash')
-                    ))
-            
-            fig_hist.update_layout(
-                xaxis_title="Fecha",
-                yaxis_title="Valor (base 100)",
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-                margin=dict(l=20, r=20, t=20, b=20),
-                height=400
-            )
-            
-            st.plotly_chart(fig_hist, use_container_width=True)
-            
-            # Tabla de retornos por año
-            st.markdown("#### Retornos por Año")
-            df_history['year'] = df_history.index.year
-            yearly = df_history.groupby('year')['daily_return'].apply(lambda x: (1 + x).prod() - 1) * 100
-            st.bar_chart(yearly)
-            
-        except Exception as e:
-            st.warning(f"Error al cargar histórico: {e}")
-    else:
-        st.info("📊 Histórico no disponible. Ejecuta el script de histórico para comenzar a trackear.")
 
     # === Gráfico ===
     st.markdown("### 🥧 Distribución del portafolio")
